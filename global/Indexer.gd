@@ -94,6 +94,82 @@ func has_storage_permission() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Android SAF (content://) cesty -> reálná cesta v souborovém systému
+# ---------------------------------------------------------------------------
+# Nativní výběr složky na Androidu vrací "content://" URI (Storage Access
+# Framework), se kterým DirAccess/FileAccess v Godotu zatím pořádně neumí
+# pracovat. Pro běžné "primary" externí úložiště (/storage/emulated/0/...)
+# ale dokážeme z té URI odvodit skutečnou cestu.
+
+func resolve_folder_path(raw_path: String) -> String:
+	if not raw_path.begins_with("content://"):
+		return raw_path
+
+	var marker := "/tree/"
+	var idx := raw_path.find(marker)
+	if idx == -1:
+		return raw_path
+
+	var encoded_doc_id := raw_path.substr(idx + marker.length())
+	var doc_id := encoded_doc_id.uri_decode()
+
+	var colon_idx := doc_id.find(":")
+	if colon_idx == -1:
+		return raw_path
+
+	var volume := doc_id.substr(0, colon_idx)
+	var sub_path := doc_id.substr(colon_idx + 1)
+
+	if volume == "primary":
+		return "/storage/emulated/0/" + sub_path
+	else:
+		# Vyměnitelné úložiště (SD karta) - volume je jeho ID.
+		return "/storage/" + volume + "/" + sub_path
+
+
+# Vrátí čitelný diagnostický text o tom, jestli je zadaná složka reálně
+# čitelná - kolik položek v ní DirAccess vidí, kolik z nich jsou soubory,
+# a jestli DirAccess.open() vůbec uspěl. Zobrazujeme přímo v appce, aby se
+# dalo ladit i bez adb/logcatu.
+func diagnose_path(path: String) -> String:
+	var lines: Array = []
+	lines.append("Cesta: %s" % path)
+
+	if OS.get_name() == "Android":
+		lines.append("Oprávnění (READ/MANAGE_EXTERNAL_STORAGE): %s" % ("ANO" if has_storage_permission() else "NE"))
+
+	var dir := DirAccess.open(path)
+	if dir == null:
+		var err := DirAccess.get_open_error()
+		lines.append("DirAccess.open() SELHALO (chyba %d) - složka není čitelná." % err)
+		return "\n".join(lines)
+
+	dir.list_dir_begin()
+	var name := dir.get_next()
+	var file_count := 0
+	var dir_count := 0
+	var sample: Array = []
+	while name != "":
+		if name != "." and name != "..":
+			if dir.current_is_dir():
+				dir_count += 1
+			else:
+				file_count += 1
+			if sample.size() < 5:
+				sample.append(name)
+		name = dir.get_next()
+	dir.list_dir_end()
+
+	lines.append("DirAccess.open() OK. Podsložek: %d, souborů: %d." % [dir_count, file_count])
+	if sample.size() > 0:
+		lines.append("Ukázka: " + ", ".join(sample))
+	elif dir_count == 0 and file_count == 0:
+		lines.append("Složka je prázdná nebo do ní bez oprávnění nevidíme dovnitř.")
+
+	return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Ukládání nastavení a indexu do user:// (perzistentní úložiště appky)
 # ---------------------------------------------------------------------------
 

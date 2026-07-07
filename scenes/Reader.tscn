@@ -1,15 +1,17 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://3442mmvcfetu"]
 
-[ext_resource type="Script" path="res://scenes/Reader.gd" id="1"]
+[ext_resource type="Script" uid="uid://dlcl1kd2v1r13" path="res://scenes/Reader.gd" id="1"]
 
-[node name="Reader" type="Control"]
+[node name="Reader" type="Control" unique_id=1618409611]
 layout_mode = 3
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("1")
 
-[node name="VBoxContainer" type="VBoxContainer" parent="."]
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=122402004]
 layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 20.0
@@ -18,45 +20,45 @@ offset_right = -20.0
 offset_bottom = -20.0
 theme_override_constants/separation = 10
 
-[node name="TitleLabel" type="Label" parent="VBoxContainer"]
+[node name="TitleLabel" type="Label" parent="VBoxContainer" unique_id=1153979528]
 layout_mode = 2
-autowrap_mode = 2
-text = "Název souboru"
 theme_override_font_sizes/font_size = 28
+text = "Název souboru"
+autowrap_mode = 2
 
-[node name="ScrollContainer" type="ScrollContainer" parent="VBoxContainer"]
+[node name="ScrollContainer" type="ScrollContainer" parent="VBoxContainer" unique_id=1479277329]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="TextLabel" type="RichTextLabel" parent="VBoxContainer/ScrollContainer"]
+[node name="TextLabel" type="RichTextLabel" parent="VBoxContainer/ScrollContainer" unique_id=537572724]
 layout_mode = 2
 size_flags_horizontal = 3
-bbcode_enabled = false
-scroll_active = false
-fit_content = true
-selection_enabled = true
-theme_override_font_sizes/normal_font_size = 32
+focus_mode = 2
 theme_override_constants/line_separation = 10
+theme_override_font_sizes/normal_font_size = 32
+fit_content = true
+scroll_active = false
+selection_enabled = true
 
-[node name="BottomBar" type="HBoxContainer" parent="VBoxContainer"]
+[node name="BottomBar" type="HBoxContainer" parent="VBoxContainer" unique_id=2014282710]
 layout_mode = 2
 theme_override_constants/separation = 20
 
-[node name="BackButton" type="Button" parent="VBoxContainer/BottomBar"]
+[node name="BackButton" type="Button" parent="VBoxContainer/BottomBar" unique_id=1701299061]
+custom_minimum_size = Vector2(0, 140)
 layout_mode = 2
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(0, 140)
 theme_override_font_sizes/font_size = 26
 text = "Zpět"
 
-[node name="MinusButton" type="Button" parent="VBoxContainer/BottomBar"]
-layout_mode = 2
+[node name="MinusButton" type="Button" parent="VBoxContainer/BottomBar" unique_id=969031058]
 custom_minimum_size = Vector2(150, 150)
+layout_mode = 2
 theme_override_font_sizes/font_size = 30
 text = "A-"
 
-[node name="PlusButton" type="Button" parent="VBoxContainer/BottomBar"]
-layout_mode = 2
+[node name="PlusButton" type="Button" parent="VBoxContainer/BottomBar" unique_id=792394803]
 custom_minimum_size = Vector2(150, 150)
+layout_mode = 2
 theme_override_font_sizes/font_size = 30
 text = "A+"
