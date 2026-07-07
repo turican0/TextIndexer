@@ -70,7 +70,7 @@ func _run_search(new_text: String) -> void:
 		var file_path: String = r["path"]
 		btn.text = "%s   (%d×)" % [file_path.get_file(), r["count"]]
 		btn.tooltip_text = file_path
-		btn.custom_minimum_size.y = 130
+		btn.custom_minimum_size.y = 140
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.add_theme_font_size_override("font_size", 28)
 		btn.add_theme_color_override("font_color", Color.BLACK)

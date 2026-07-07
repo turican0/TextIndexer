@@ -25,7 +25,7 @@ theme_override_font_sizes/font_size = 34
 
 [node name="PermissionButton" type="Button" parent="VBoxContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 110)
+custom_minimum_size = Vector2(0, 140)
 theme_override_font_sizes/font_size = 26
 text = "Povolit přístup k úložišti"
 
@@ -37,13 +37,13 @@ text = "Vybraná složka: (žádná)"
 
 [node name="PickFolderButton" type="Button" parent="VBoxContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 110)
+custom_minimum_size = Vector2(0, 140)
 theme_override_font_sizes/font_size = 26
 text = "Vybrat složku"
 
 [node name="IndexButton" type="Button" parent="VBoxContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 110)
+custom_minimum_size = Vector2(0, 140)
 theme_override_font_sizes/font_size = 26
 text = "Indexovat"
 
@@ -60,6 +60,6 @@ text = ""
 
 [node name="BackButton" type="Button" parent="VBoxContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 110)
+custom_minimum_size = Vector2(0, 140)
 theme_override_font_sizes/font_size = 26
 text = "Zpět"

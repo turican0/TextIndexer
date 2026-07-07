@@ -82,7 +82,7 @@ func _refresh() -> void:
 	for d in dirs:
 		var btn := Button.new()
 		btn.text = "📁  " + d
-		btn.custom_minimum_size.y = 120
+		btn.custom_minimum_size.y = 140
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.add_theme_font_size_override("font_size", 28)
 		btn.add_theme_color_override("font_color", Color.BLACK)

@@ -31,7 +31,7 @@ theme_override_font_sizes/font_size = 34
 text = "Vyhledávání"
 
 [node name="SettingsButton" type="Button" parent="VBoxContainer/TopBar" unique_id=605182552]
-custom_minimum_size = Vector2(0, 100)
+custom_minimum_size = Vector2(0, 140)
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
 text = "Nastavení"
@@ -44,7 +44,7 @@ text = "Status"
 autowrap_mode = 2
 
 [node name="SearchEdit" type="LineEdit" parent="VBoxContainer" unique_id=446458354]
-custom_minimum_size = Vector2(0, 100)
+custom_minimum_size = Vector2(0, 140)
 layout_mode = 2
 theme_override_font_sizes/font_size = 30
 placeholder_text = "Zadej hledaná slova..."
