@@ -1,0 +1,65 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/Settings.gd" id="1"]
+
+[node name="Settings" type="Control"]
+layout_mode = 3
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 40.0
+offset_right = -20.0
+offset_bottom = -20.0
+theme_override_constants/separation = 20
+
+[node name="TitleLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "Nastavení"
+theme_override_font_sizes/font_size = 34
+
+[node name="PermissionButton" type="Button" parent="VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 110)
+theme_override_font_sizes/font_size = 26
+text = "Povolit přístup k úložišti"
+
+[node name="FolderLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Vybraná složka: (žádná)"
+
+[node name="PickFolderButton" type="Button" parent="VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 110)
+theme_override_font_sizes/font_size = 26
+text = "Vybrat složku"
+
+[node name="IndexButton" type="Button" parent="VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 110)
+theme_override_font_sizes/font_size = 26
+text = "Indexovat"
+
+[node name="ProgressBar" type="ProgressBar" parent="VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 40)
+max_value = 100.0
+
+[node name="ProgressLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 22
+text = ""
+
+[node name="BackButton" type="Button" parent="VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 110)
+theme_override_font_sizes/font_size = 26
+text = "Zpět"

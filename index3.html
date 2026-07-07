@@ -1,0 +1,113 @@
+<!doctype html>
+<html itemscope="" itemtype="http://schema.org/WebPage" lang="en">
+	<head>
+		<link rel="shortcut icon" href="/favicon32.gif" type="image/x-icon" sizes="32x32" />
+		<link rel="shortcut icon" href="/favicon16.gif" type="image/x-icon" sizes="16x16" />
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		
+		<title>SVGnest - Free and Open Source nesting for CNC machines, lasers and plasma cutters</title>
+		
+		<meta name="description" content="A completely free and open source application for automatic nesting. Comes with advanced features like part-in-part nesting and concave area detection." />
+		
+		<link rel="stylesheet" type="text/css" href="./lib/svgNEST/style.css" />
+		
+		<script src="./lib/svgNEST/mysvgparser.js"></script>
+		
+		<script>
+		// UI-specific stuff, button clicks go here
+		function ready(fn){
+			if (document.readyState != 'loading'){
+				fn();
+			}
+			else {
+				document.addEventListener('DOMContentLoaded', fn);
+			}
+		}
+		
+		let dxfFile = null;
+		ready(async function(){
+			document.getElementById('dxfFile').addEventListener('change', function(event) {
+			  if (event.target.files.length > 0) {
+				dxfFile = event.target.files[0];
+				console.log("DXF soubor načten:", dxfFile.name);
+			  } else {
+				dxfFile = null;
+			  }
+			});
+		});
+		
+var partCount=1;
+var partPerimeter=1;
+var partArea=1;
+
+let nestAreaWidth=2000;
+let nestAreaHeight=1100;
+
+		async function InternRunNesting() {
+			[partCount,partPerimeter,partArea] = await runNesting(nestAreaWidth,nestAreaHeight);
+			console.log("partCount",partCount,partPerimeter,partArea);
+			//[partCount,partPerimeter,partArea] = ExternRunNesting();
+		}
+		
+
+		</script>
+	</head>
+	<body>
+
+		<div id="svgnest">
+					
+			<div class="sidebar">				
+				<div id="info">				
+				<h2 id="info_time"></h2>
+				<div class="progress"><div class="progress_inner" id="info_progress"></div></div>
+				<span class="subscript">Placement progress</span>
+				
+				<div id="info_placement">
+					<div class="column left">
+						<h1 class="label"><span id="info_efficiency"></span><sup>%</sup></h1>
+						<span class="subscript">Material Utilization</span>
+					</div>
+					
+					<div class="column right">
+						<h1 class="label" id="info_iterations"></h1>
+						<span class="subscript">Iterations</span>
+					</div>
+					
+					<div class="column left">
+						<h1 class="label"><span id="info_placed"></span></h1>
+						<span class="subscript">Parts placed</span>
+					</div>
+					
+					<div class="column left">
+						<h1 class="label"><span id="on_sheet"></span></h1>
+						<span class="subscript">On Sheet</span>
+					</div>
+				</div>
+				</div>
+			</div>
+			
+			
+			
+			<label>Sirka plechu (mm): <input id="sheetWidth" type="number" value="500" min="1" required /></label>
+			<label>Vyska plechu (mm): <input id="sheetHeight" type="number" value="500" min="1" required /></label>
+			<label>Vyberte DXF soubor: <input type="file" id="dxfFile" accept=".dxf" /></label>
+			<button onclick="InternRunNesting()">Run Nesting</button>
+			
+			<div id="select">
+			<svg version="1.1" id="svg2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="2503px" height="1250px" viewBox="0 0 2502 1250" enable-background="new 0 0 2501 1250" xml:space="preserve">
+				<polyline fill="none" stroke="#010101" stroke-miterlimit="10" points="0,0 100,0 100,500 0,500 0,0"/>
+			</svg>
+
+			</div>
+			
+			<div id="bins">
+				<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="svg3" x="0px" y="0px" width="3500" height="2250" viewBox="0 0 3500 2250" enable-background="0 0 3500 2250" xml:space="preserve">
+				<rect width="3500" height="2250" fill="none" stroke="#010101" id="myRectangle" class="bin" transform="translate(0 0)"></rect>
+				</svg>
+			</div>
+			
+			<div id="svgOutput" style="position:absolute;width: 50px; height: 50px;"></div>
+			
+		</div>
+	</body>
+</html>
