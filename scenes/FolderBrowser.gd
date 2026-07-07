@@ -38,6 +38,8 @@ func _ready() -> void:
 	select_button.pressed.connect(_on_select)
 	cancel_button.pressed.connect(_on_cancel)
 
+	path_label.add_theme_color_override("font_color", Color.BLACK)
+
 	_refresh()
 
 
@@ -73,6 +75,7 @@ func _refresh() -> void:
 		var lbl := Label.new()
 		lbl.text = "(žádné podsložky)"
 		lbl.add_theme_font_size_override("font_size", 22)
+		lbl.add_theme_color_override("font_color", Color.BLACK)
 		list_container.add_child(lbl)
 		return
 
@@ -82,6 +85,9 @@ func _refresh() -> void:
 		btn.custom_minimum_size.y = 120
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.add_theme_font_size_override("font_size", 28)
+		btn.add_theme_color_override("font_color", Color.BLACK)
+		btn.add_theme_color_override("font_hover_color", Color.BLACK)
+		btn.add_theme_color_override("font_pressed_color", Color.BLACK)
 		btn.pressed.connect(_on_folder_row_pressed.bind(d))
 		list_container.add_child(btn)
 

@@ -21,7 +21,12 @@ func _ready() -> void:
 	progress_bar.visible = false
 	progress_label.visible = false
 
-	# Barvy řeší globální motiv res://theme/AppTheme.tres, tady jen hierarchie velikostí.
+	# Barvy nastavujeme napevno v kódu (nezávisle na globálním motivu),
+	# aby text nemohl nikdy skončit jako bílý na bílém pozadí.
+	$VBoxContainer/TitleLabel.add_theme_color_override("font_color", Color.BLACK)
+	folder_label.add_theme_color_override("font_color", Color.BLACK)
+	progress_label.add_theme_color_override("font_color", Color.BLACK)
+
 	$VBoxContainer/TitleLabel.add_theme_font_size_override("font_size", 38) # Větší hlavní titulek
 	folder_label.add_theme_font_size_override("font_size", 26)              # Cesta k adresáři
 	progress_label.add_theme_font_size_override("font_size", 24)            # Stav indexace

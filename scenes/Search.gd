@@ -14,8 +14,13 @@ func _ready() -> void:
 	_update_status()
 	_run_search(search_edit.text)
 
-	# Barvy (černá na bílém) a základní velikost písma teď řeší globální
-	# motiv res://theme/AppTheme.tres. Tady jen doladíme hierarchii velikostí.
+	# Barvy nastavujeme napevno v kódu (nezávisle na globálním motivu),
+	# aby text nemohl nikdy skončit jako bílý na bílém pozadí.
+	$VBoxContainer/TopBar/TitleLabel.add_theme_color_override("font_color", Color.BLACK)
+	status_label.add_theme_color_override("font_color", Color(0.25, 0.25, 0.25, 1))
+	search_edit.add_theme_color_override("font_color", Color.BLACK)
+	search_edit.add_theme_color_override("font_placeholder_color", Color(0.45, 0.45, 0.45, 1))
+
 	$VBoxContainer/TopBar/TitleLabel.add_theme_font_size_override("font_size", 38) # Větší titulek
 	status_label.add_theme_font_size_override("font_size", 24)                     # Menší stavový řádek
 
@@ -56,6 +61,7 @@ func _run_search(new_text: String) -> void:
 	if results.is_empty():
 		var lbl := Label.new()
 		lbl.text = "Nic nenalezeno."
+		lbl.add_theme_color_override("font_color", Color.BLACK)
 		results_container.add_child(lbl)
 		return
 
@@ -67,6 +73,9 @@ func _run_search(new_text: String) -> void:
 		btn.custom_minimum_size.y = 130
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.add_theme_font_size_override("font_size", 28)
+		btn.add_theme_color_override("font_color", Color.BLACK)
+		btn.add_theme_color_override("font_hover_color", Color.BLACK)
+		btn.add_theme_color_override("font_pressed_color", Color.BLACK)
 		btn.pressed.connect(_on_result_pressed.bind(file_path))
 		results_container.add_child(btn)
 

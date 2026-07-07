@@ -54,6 +54,7 @@ func strip_diacritics(text: String) -> String:
 	return result
 
 var selected_folder: String = ""
+var reader_font_size: int = 30
 var index_data: Dictionary = {}      # slovo -> { cesta_k_souboru: pocet_vyskytu }
 var indexed_files: Array = []        # seznam všech zaindexovaných souborů
 var current_reader_path: String = "" # cesta k souboru, který se má otevřít v Readeru
@@ -99,7 +100,7 @@ func has_storage_permission() -> bool:
 func save_settings() -> void:
 	var f := FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify({"folder": selected_folder}))
+		f.store_string(JSON.stringify({"folder": selected_folder, "reader_font_size": reader_font_size}))
 		f.close()
 
 func load_settings() -> void:
@@ -112,6 +113,8 @@ func load_settings() -> void:
 	f.close()
 	if typeof(parsed) == TYPE_DICTIONARY and parsed.has("folder"):
 		selected_folder = parsed["folder"]
+	if typeof(parsed) == TYPE_DICTIONARY and parsed.has("reader_font_size"):
+		reader_font_size = int(parsed["reader_font_size"])
 
 func save_index() -> void:
 	var f := FileAccess.open(INDEX_PATH, FileAccess.WRITE)
