@@ -13,20 +13,11 @@ func _ready() -> void:
 	settings_button.pressed.connect(_on_settings_pressed)
 	_update_status()
 	_run_search(search_edit.text)
-	
-	# --- Nastavení černé na bílém ---
-	# 1. Popisky (Labels)
-	$VBoxContainer/TopBar/TitleLabel.add_theme_color_override("font_color", Color.BLACK)
-	status_label.add_theme_color_override("font_color", Color.BLACK)
-	
-	# 2. Vstupní pole (LineEdit)
-	search_edit.add_theme_color_override("font_color", Color.BLACK)
-	search_edit.add_theme_color_override("font_placeholder_color", Color.DARK_GRAY)
-	
-	# --- Nastavení velikosti textu (Font Size) ---
-	$VBoxContainer/TopBar/TitleLabel.add_theme_font_size_override("font_size", 34) # Větší titulek
+
+	# Barvy (černá na bílém) a základní velikost písma teď řeší globální
+	# motiv res://theme/AppTheme.tres. Tady jen doladíme hierarchii velikostí.
+	$VBoxContainer/TopBar/TitleLabel.add_theme_font_size_override("font_size", 38) # Větší titulek
 	status_label.add_theme_font_size_override("font_size", 24)                     # Menší stavový řádek
-	search_edit.add_theme_font_size_override("font_size", 28)
 
 
 func _on_text_changed(_new_text: String) -> void:

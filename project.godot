@@ -30,7 +30,12 @@ window/size/window_width_override=500
 window/size/window_height_override=900
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-window/handheld/orientation="portrait"
+window/handheld/orientation="sensor"
+
+[gui]
+
+theme/custom="res://theme/AppTheme.tres"
+theme/default_font_size=30
 
 [rendering]
 

@@ -12,15 +12,25 @@ signal folder_selected(path: String)
 @onready var up_button: Button = $Panel/VBoxContainer/HBoxContainer/UpButton
 @onready var select_button: Button = $Panel/VBoxContainer/HBoxContainer/SelectButton
 @onready var cancel_button: Button = $Panel/VBoxContainer/HBoxContainer/CancelButton
+@onready var native_folder_dialog: FileDialog = $NativeFolderDialog
 
 var current_path: String = ""
 
 
 func _ready() -> void:
+	# Na Androidu (11+) nemá vlastní procházení přes DirAccess přístup ke
+	# sdíleným složkám jako Download - jde o tzv. scoped storage. Řešíme to
+	# systémovým (nativním) výběrem složky, který používá Android Storage
+	# Access Framework a funguje bez zvláštního oprávnění MANAGE_EXTERNAL_STORAGE.
+	if OS.get_name() == "Android":
+		native_folder_dialog.dir_selected.connect(_on_native_dir_selected)
+		native_folder_dialog.canceled.connect(_on_cancel)
+		$Panel.visible = false
+		native_folder_dialog.popup_centered()
+		return
+
 	if Indexer.selected_folder != "" and DirAccess.dir_exists_absolute(Indexer.selected_folder):
 		current_path = Indexer.selected_folder
-	elif OS.get_name() == "Android":
-		current_path = "/storage/emulated/0"
 	else:
 		current_path = OS.get_system_dir(OS.SYSTEM_DIR_DOCUMENTS)
 
@@ -29,6 +39,11 @@ func _ready() -> void:
 	cancel_button.pressed.connect(_on_cancel)
 
 	_refresh()
+
+
+func _on_native_dir_selected(path: String) -> void:
+	folder_selected.emit(path)
+	queue_free()
 
 
 func _refresh() -> void:
