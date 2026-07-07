@@ -7,6 +7,7 @@ extends Control
 @onready var progress_label: Label = $VBoxContainer/ProgressLabel
 @onready var back_button: Button = $VBoxContainer/BackButton
 @onready var permission_button: Button = $VBoxContainer/PermissionButton
+@onready var permission_info_dialog: AcceptDialog = $PermissionInfoDialog
 
 
 func _ready() -> void:
@@ -38,7 +39,19 @@ func _refresh_folder_label() -> void:
 
 
 func _on_permission_pressed() -> void:
+	if OS.get_name() != "Android":
+		return
+
+	# Nejdřív zkusíme klasický systémový dialog (na starších verzích Androidu
+	# - do API 29 - to ještě funguje pro READ/WRITE_EXTERNAL_STORAGE).
 	Indexer.request_storage_permission()
+
+	# Na Androidu 11+ tenhle dialog ale běžně nic nezobrazí, protože plný
+	# přístup ("Přístup ke všem souborům") jde zapnout jen ručně v Nastavení -
+	# Godot bez vlastního nativního pluginu neumí tu konkrétní obrazovku
+	# otevřít programově, proto vždy zobrazíme přesný manuální návod.
+	permission_info_dialog.dialog_text = "Poznámka: Výběr složky (i Download) teď funguje přes systémový výběr a žádné zvláštní oprávnění navíc nevyžaduje.\n\nPokud by přesto něco nešlo otevřít, zapneš plný přístup k souborům ručně:\n\nNastavení telefonu → Aplikace → TextIndexer → Oprávnění → Soubory a média → Povolit správu všech souborů."
+	permission_info_dialog.popup_centered()
 
 
 func _on_pick_folder() -> void:
