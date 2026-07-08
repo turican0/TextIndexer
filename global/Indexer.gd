@@ -75,6 +75,12 @@ func _ready() -> void:
 	load_settings()
 	load_index()
 
+	# Přímé, za-běhu nastavení orientace - nezávisí na tom, co (ne)obsahuje
+	# vygenerovaný AndroidManifest.xml, takže by mělo fungovat i kdyby export
+	# šablona orientaci z project.godot ze záhadných důvodů neaplikovala.
+	if OS.get_name() == "Android":
+		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
+
 
 # ---------------------------------------------------------------------------
 # Android oprávnění
