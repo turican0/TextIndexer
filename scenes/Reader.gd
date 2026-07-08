@@ -17,7 +17,8 @@ func _ready() -> void:
 	plus_button.pressed.connect(_on_plus_pressed)
 
 	var path: String = Indexer.current_reader_path
-	title_label.text = path.get_file()
+	var parent_dir := path.get_base_dir().get_file()
+	title_label.text = "%s / %s" % [parent_dir, path.get_file()] if parent_dir != "" else path.get_file()
 	text_label.text = Indexer.get_reader_text(path)
 
 	# Barvy nastavujeme napevno v kódu (nezávisle na globálním motivu),

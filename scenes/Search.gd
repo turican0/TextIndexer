@@ -68,7 +68,9 @@ func _run_search(new_text: String) -> void:
 	for r in results:
 		var btn := Button.new()
 		var file_path: String = r["path"]
-		btn.text = "%s   (%d×)" % [file_path.get_file(), r["count"]]
+		var parent_dir := file_path.get_base_dir().get_file()
+		var display_name := "%s / %s" % [parent_dir, file_path.get_file()] if parent_dir != "" else file_path.get_file()
+		btn.text = "%s   (%d×)" % [display_name, r["count"]]
 		btn.tooltip_text = file_path
 		btn.custom_minimum_size.y = 140
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
