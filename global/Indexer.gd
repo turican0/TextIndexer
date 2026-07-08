@@ -161,29 +161,36 @@ func diagnose_path(path: String) -> String:
 	var name := dir.get_next()
 	var file_count := 0
 	var dir_count := 0
-	var first_file_path := ""
 	var sample: Array = []
 	while name != "":
 		if name != "." and name != "..":
-			var full_path := path.path_join(name)
 			if dir.current_is_dir():
 				dir_count += 1
 			else:
 				file_count += 1
-				if first_file_path == "":
-					first_file_path = full_path
 			if sample.size() < 5:
 				sample.append(name)
 		name = dir.get_next()
 	dir.list_dir_end()
 
-	lines.append("Výpis adresáře: podsložek %d, souborů %d." % [dir_count, file_count])
+	lines.append("Výpis adresáře (jen 1. úroveň): podsložek %d, souborů %d." % [dir_count, file_count])
 	if sample.size() > 0:
 		lines.append("Ukázka položek: " + ", ".join(sample))
 	elif dir_count == 0 and file_count == 0:
 		lines.append("-> DirAccess adresář otevřel, ale nevidí v něm ŽÁDNÉ položky (typické pro omezený přístup bez MANAGE_EXTERNAL_STORAGE).")
 
-	# --- 3) Reálný pokus přečíst konkrétní soubor ---
+	# --- 3) Rekurzivní kontrola - stejně jako reálné indexování prochází
+	# i podsložky, takže i diagnostika se musí podívat hlouběji, ne jen na
+	# první úroveň, aby "0 souborů" na 1. úrovni nevypadalo jako chyba.
+	var deep := {"files": 0, "dirs": 0, "sample": []}
+	_diag_scan_recursive(path, deep, 0)
+	lines.append("Rekurzivní průzkum celého stromu: podsložek %d, souborů celkem %d." % [deep["dirs"], deep["files"]])
+	if deep["sample"].size() > 0:
+		lines.append("Nalezené soubory (ukázka): " + ", ".join(deep["sample"]))
+
+	var first_file_path: String = deep["sample"][0] if deep["sample"].size() > 0 else ""
+
+	# --- 4) Reálný pokus přečíst konkrétní soubor (klidně z hloubky stromu) ---
 	if first_file_path != "":
 		lines.append("Zkouším přečíst: %s" % first_file_path.get_file())
 		var f := FileAccess.open(first_file_path, FileAccess.READ)
@@ -196,8 +203,37 @@ func diagnose_path(path: String) -> String:
 			var sample_bytes := f.get_buffer(min(len, 64))
 			f.close()
 			lines.append("FileAccess.open() OK, velikost %d B, prvních pár bajtů: %s" % [len, sample_bytes.get_string_from_utf8().left(40)])
+	elif deep["dirs"] > 0:
+		lines.append("-> V celém stromu se nenašel ani jeden soubor (jen podsložky) - buď je opravdu prázdný, nebo hlubší podsložky nejdou otevřít.")
 
 	return "\n".join(lines)
+
+
+# Pomocná rekurzivní funkce pro diagnostiku - kopíruje logiku skutečného
+# indexování (_collect_files), ale sbírá počty a ukázky pro zobrazení,
+# místo aby rovnou indexovala. Omezeno hloubkou a počtem položek, aby
+# diagnostika nezamrzla na obřím stromu složek.
+func _diag_scan_recursive(path: String, out: Dictionary, depth: int) -> void:
+	if depth > 6 or out["files"] + out["dirs"] > 500:
+		return
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var name := dir.get_next()
+	while name != "":
+		if name != "." and name != "..":
+			var full_path := path.path_join(name)
+			if dir.current_is_dir():
+				out["dirs"] += 1
+				if not (name in SKIP_DIRECTORIES):
+					_diag_scan_recursive(full_path, out, depth + 1)
+			else:
+				out["files"] += 1
+				if out["sample"].size() < 5:
+					out["sample"].append(full_path)
+		name = dir.get_next()
+	dir.list_dir_end()
 
 
 # ---------------------------------------------------------------------------
