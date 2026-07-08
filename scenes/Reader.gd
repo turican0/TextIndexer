@@ -27,10 +27,10 @@ func _ready() -> void:
 	text_label.add_theme_color_override("font_selected_color", Color.WHITE)
 	text_label.add_theme_color_override("selection_color", Color(0.2, 0.4, 0.9, 0.6))
 
-	title_label.add_theme_font_size_override("font_size", 34) # Větší titulek souboru
+	title_label.add_theme_font_size_override("font_size", 44) # Větší titulek souboru
 
 	if Indexer.reader_font_size < MIN_FONT_SIZE or Indexer.reader_font_size > MAX_FONT_SIZE:
-		Indexer.reader_font_size = 30
+		Indexer.reader_font_size = 36
 	_apply_font_size()
 
 

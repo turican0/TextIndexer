@@ -31,7 +31,7 @@ theme_override_constants/separation = 12
 [node name="PathLabel" type="Label" parent="Panel/VBoxContainer"]
 layout_mode = 2
 autowrap_mode = 2
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 26
 text = "/"
 
 [node name="ScrollContainer" type="ScrollContainer" parent="Panel/VBoxContainer"]
@@ -51,21 +51,21 @@ theme_override_constants/separation = 20
 layout_mode = 2
 size_flags_horizontal = 3
 custom_minimum_size = Vector2(0, 140)
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 34
 text = "⬆ Nahoru"
 
 [node name="SelectButton" type="Button" parent="Panel/VBoxContainer/HBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
 custom_minimum_size = Vector2(0, 140)
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 34
 text = "✓ Vybrat tuto"
 
 [node name="CancelButton" type="Button" parent="Panel/VBoxContainer/HBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
 custom_minimum_size = Vector2(0, 140)
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 34
 text = "✕ Zrušit"
 
 [node name="NativeFolderDialog" type="FileDialog" parent="."]

@@ -54,7 +54,8 @@ func strip_diacritics(text: String) -> String:
 	return result
 
 var selected_folder: String = ""
-var reader_font_size: int = 30
+var selected_folder_raw: String = ""  # původní cesta/URI vrácená systémovým výběrem, před převodem
+var reader_font_size: int = 36
 var index_data: Dictionary = {}      # slovo -> { cesta_k_souboru: pocet_vyskytu }
 var indexed_files: Array = []        # seznam všech zaindexovaných souborů
 var current_reader_path: String = "" # cesta k souboru, který se má otevřít v Readeru
@@ -128,43 +129,73 @@ func resolve_folder_path(raw_path: String) -> String:
 
 
 # Vrátí čitelný diagnostický text o tom, jestli je zadaná složka reálně
-# čitelná - kolik položek v ní DirAccess vidí, kolik z nich jsou soubory,
-# a jestli DirAccess.open() vůbec uspěl. Zobrazujeme přímo v appce, aby se
+# čitelná - kolik položek v ní DirAccess vidí, jestli DirAccess.open() vůbec
+# uspěl, a navíc zkusí reálně PŘEČÍST obsah prvního nalezeného souboru (ne
+# jen ho vypsat) - aby bylo jasné, jestli je problém v listování adresáře,
+# nebo až ve čtení konkrétního souboru. Zobrazujeme přímo v appce, aby se
 # dalo ladit i bez adb/logcatu.
 func diagnose_path(path: String) -> String:
 	var lines: Array = []
-	lines.append("Cesta: %s" % path)
+	if selected_folder_raw != "" and selected_folder_raw != path:
+		lines.append("Cesta z výběru (surová): %s" % selected_folder_raw)
+	lines.append("Cesta (po převodu): %s" % path)
 
 	if OS.get_name() == "Android":
-		lines.append("Oprávnění (READ/MANAGE_EXTERNAL_STORAGE): %s" % ("ANO" if has_storage_permission() else "NE"))
+		lines.append("Android verze SDK: %s" % OS.get_version())
+		var granted := OS.get_granted_permissions()
+		lines.append("Udělená oprávnění (%d): %s" % [granted.size(), (", ".join(granted) if granted.size() > 0 else "žádná")])
+		lines.append("has_storage_permission(): %s" % ("ANO" if has_storage_permission() else "NE"))
 
+	# --- 1) Otevření adresáře ---
 	var dir := DirAccess.open(path)
 	if dir == null:
 		var err := DirAccess.get_open_error()
-		lines.append("DirAccess.open() SELHALO (chyba %d) - složka není čitelná." % err)
+		lines.append("DirAccess.open() SELHALO: %s (kód %d)" % [error_string(err), err])
+		lines.append("-> Adresář se nepodařilo ani otevřít pro čtení. Nejčastější příčina: chybějící 'Přístup ke všem souborům' (MANAGE_EXTERNAL_STORAGE).")
 		return "\n".join(lines)
 
+	lines.append("DirAccess.open() OK.")
+
+	# --- 2) Výpis obsahu ---
 	dir.list_dir_begin()
 	var name := dir.get_next()
 	var file_count := 0
 	var dir_count := 0
+	var first_file_path := ""
 	var sample: Array = []
 	while name != "":
 		if name != "." and name != "..":
+			var full_path := path.path_join(name)
 			if dir.current_is_dir():
 				dir_count += 1
 			else:
 				file_count += 1
+				if first_file_path == "":
+					first_file_path = full_path
 			if sample.size() < 5:
 				sample.append(name)
 		name = dir.get_next()
 	dir.list_dir_end()
 
-	lines.append("DirAccess.open() OK. Podsložek: %d, souborů: %d." % [dir_count, file_count])
+	lines.append("Výpis adresáře: podsložek %d, souborů %d." % [dir_count, file_count])
 	if sample.size() > 0:
-		lines.append("Ukázka: " + ", ".join(sample))
+		lines.append("Ukázka položek: " + ", ".join(sample))
 	elif dir_count == 0 and file_count == 0:
-		lines.append("Složka je prázdná nebo do ní bez oprávnění nevidíme dovnitř.")
+		lines.append("-> DirAccess adresář otevřel, ale nevidí v něm ŽÁDNÉ položky (typické pro omezený přístup bez MANAGE_EXTERNAL_STORAGE).")
+
+	# --- 3) Reálný pokus přečíst konkrétní soubor ---
+	if first_file_path != "":
+		lines.append("Zkouším přečíst: %s" % first_file_path.get_file())
+		var f := FileAccess.open(first_file_path, FileAccess.READ)
+		if f == null:
+			var ferr := FileAccess.get_open_error()
+			lines.append("FileAccess.open() SELHALO: %s (kód %d)" % [error_string(ferr), ferr])
+			lines.append("-> Adresář se dá vylistovat, ale SOUBORY uvnitř se číst nedají. Skoro jistě chybí MANAGE_EXTERNAL_STORAGE.")
+		else:
+			var len := f.get_length()
+			var sample_bytes := f.get_buffer(min(len, 64))
+			f.close()
+			lines.append("FileAccess.open() OK, velikost %d B, prvních pár bajtů: %s" % [len, sample_bytes.get_string_from_utf8().left(40)])
 
 	return "\n".join(lines)
 
@@ -188,7 +219,7 @@ func load_settings() -> void:
 	var parsed = JSON.parse_string(f.get_as_text())
 	f.close()
 	if typeof(parsed) == TYPE_DICTIONARY and parsed.has("folder"):
-		selected_folder = parsed["folder"]
+		selected_folder = resolve_folder_path(parsed["folder"])
 	if typeof(parsed) == TYPE_DICTIONARY and parsed.has("reader_font_size"):
 		reader_font_size = int(parsed["reader_font_size"])
 

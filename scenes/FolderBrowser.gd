@@ -44,7 +44,9 @@ func _ready() -> void:
 
 
 func _on_native_dir_selected(path: String) -> void:
-	folder_selected.emit(path)
+	Indexer.selected_folder_raw = path
+	var real_path := Indexer.resolve_folder_path(path)
+	folder_selected.emit(real_path)
 	queue_free()
 
 
@@ -74,7 +76,7 @@ func _refresh() -> void:
 	if dirs.is_empty():
 		var lbl := Label.new()
 		lbl.text = "(žádné podsložky)"
-		lbl.add_theme_font_size_override("font_size", 22)
+		lbl.add_theme_font_size_override("font_size", 26)
 		lbl.add_theme_color_override("font_color", Color.BLACK)
 		list_container.add_child(lbl)
 		return
@@ -84,7 +86,7 @@ func _refresh() -> void:
 		btn.text = "📁  " + d
 		btn.custom_minimum_size.y = 140
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn.add_theme_font_size_override("font_size", 28)
+		btn.add_theme_font_size_override("font_size", 34)
 		btn.add_theme_color_override("font_color", Color.BLACK)
 		btn.add_theme_color_override("font_hover_color", Color.BLACK)
 		btn.add_theme_color_override("font_pressed_color", Color.BLACK)

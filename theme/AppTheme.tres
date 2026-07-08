@@ -77,7 +77,7 @@ content_margin_right = 12.0
 content_margin_bottom = 6.0
 
 [resource]
-default_font_size = 30
+default_font_size = 34
 
 Label/colors/font_color = Color(0, 0, 0, 1)
 Label/colors/font_shadow_color = Color(0, 0, 0, 0)
@@ -87,7 +87,7 @@ Button/colors/font_hover_color = Color(0, 0, 0, 1)
 Button/colors/font_pressed_color = Color(0, 0, 0, 1)
 Button/colors/font_focus_color = Color(0, 0, 0, 1)
 Button/colors/font_disabled_color = Color(0.5, 0.5, 0.5, 1)
-Button/font_sizes/font_size = 30
+Button/font_sizes/font_size = 34
 Button/styles/normal = SubResource("StyleBoxFlat_btn_normal")
 Button/styles/hover = SubResource("StyleBoxFlat_btn_hover")
 Button/styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
@@ -97,13 +97,13 @@ Button/styles/disabled = SubResource("StyleBoxFlat_btn_normal")
 LineEdit/colors/font_color = Color(0, 0, 0, 1)
 LineEdit/colors/font_placeholder_color = Color(0.45, 0.45, 0.45, 1)
 LineEdit/colors/caret_color = Color(0, 0, 0, 1)
-LineEdit/font_sizes/font_size = 30
+LineEdit/font_sizes/font_size = 34
 LineEdit/styles/normal = SubResource("StyleBoxFlat_lineedit")
 LineEdit/styles/focus = SubResource("StyleBoxFlat_lineedit")
 LineEdit/styles/read_only = SubResource("StyleBoxFlat_lineedit")
 
 RichTextLabel/colors/default_color = Color(0, 0, 0, 1)
-RichTextLabel/font_sizes/normal_font_size = 30
+RichTextLabel/font_sizes/normal_font_size = 34
 
 Panel/styles/panel = SubResource("StyleBoxFlat_panel")
 

@@ -1,12 +1,13 @@
 extends Control
 
-@onready var folder_label: Label = $VBoxContainer/FolderLabel
-@onready var pick_button: Button = $VBoxContainer/PickFolderButton
-@onready var index_button: Button = $VBoxContainer/IndexButton
-@onready var progress_bar: ProgressBar = $VBoxContainer/ProgressBar
-@onready var progress_label: Label = $VBoxContainer/ProgressLabel
-@onready var back_button: Button = $VBoxContainer/BackButton
-@onready var permission_button: Button = $VBoxContainer/PermissionButton
+@onready var folder_label: Label = $ScrollContainer/VBoxContainer/FolderLabel
+@onready var diagnostics_label: Label = $ScrollContainer/VBoxContainer/DiagnosticsLabel
+@onready var pick_button: Button = $ScrollContainer/VBoxContainer/PickFolderButton
+@onready var index_button: Button = $ScrollContainer/VBoxContainer/IndexButton
+@onready var progress_bar: ProgressBar = $ScrollContainer/VBoxContainer/ProgressBar
+@onready var progress_label: Label = $ScrollContainer/VBoxContainer/ProgressLabel
+@onready var back_button: Button = $ScrollContainer/VBoxContainer/BackButton
+@onready var permission_button: Button = $ScrollContainer/VBoxContainer/PermissionButton
 @onready var permission_info_dialog: AcceptDialog = $PermissionInfoDialog
 
 
@@ -24,18 +25,24 @@ func _ready() -> void:
 
 	# Barvy nastavujeme napevno v kódu (nezávisle na globálním motivu),
 	# aby text nemohl nikdy skončit jako bílý na bílém pozadí.
-	$VBoxContainer/TitleLabel.add_theme_color_override("font_color", Color.BLACK)
+	$ScrollContainer/VBoxContainer/TitleLabel.add_theme_color_override("font_color", Color.BLACK)
 	folder_label.add_theme_color_override("font_color", Color.BLACK)
+	diagnostics_label.add_theme_color_override("font_color", Color(0.35, 0.35, 0.35, 1))
 	progress_label.add_theme_color_override("font_color", Color.BLACK)
 
-	$VBoxContainer/TitleLabel.add_theme_font_size_override("font_size", 38) # Větší hlavní titulek
-	folder_label.add_theme_font_size_override("font_size", 26)              # Cesta k adresáři
-	progress_label.add_theme_font_size_override("font_size", 24)            # Stav indexace
+	# Pokud už nějaká složka byla vybraná dřív, rovnou zkontrolujeme,
+	# jestli je reálně čitelná.
+	if Indexer.selected_folder != "":
+		_run_diagnostics(Indexer.selected_folder)
 
 
 func _refresh_folder_label() -> void:
 	var f := Indexer.selected_folder
 	folder_label.text = "Vybraná složka: %s" % (f if f != "" else "(žádná)")
+
+
+func _run_diagnostics(path: String) -> void:
+	diagnostics_label.text = Indexer.diagnose_path(path)
 
 
 func _on_permission_pressed() -> void:
@@ -50,7 +57,7 @@ func _on_permission_pressed() -> void:
 	# přístup ("Přístup ke všem souborům") jde zapnout jen ručně v Nastavení -
 	# Godot bez vlastního nativního pluginu neumí tu konkrétní obrazovku
 	# otevřít programově, proto vždy zobrazíme přesný manuální návod.
-	permission_info_dialog.dialog_text = "Poznámka: Výběr složky (i Download) teď funguje přes systémový výběr a žádné zvláštní oprávnění navíc nevyžaduje.\n\nPokud by přesto něco nešlo otevřít, zapneš plný přístup k souborům ručně:\n\nNastavení telefonu → Aplikace → TextIndexer → Oprávnění → Soubory a média → Povolit správu všech souborů."
+	permission_info_dialog.dialog_text = "Pro spolehlivé čtení souborů (hlavně mimo aplikaci, např. Download) je potřeba zapnout plný přístup k úložišti ručně:\n\nNastavení telefonu → Aplikace → TextIndexer → Oprávnění → Soubory a média → Povolit správu všech souborů (\"All files access\").\n\nBez toho může výběr složky projít, ale čtení souborů skončí s 0 výsledky."
 	permission_info_dialog.popup_centered()
 
 
@@ -64,6 +71,7 @@ func _on_folder_selected(path: String) -> void:
 	Indexer.selected_folder = path
 	Indexer.save_settings()
 	_refresh_folder_label()
+	_run_diagnostics(path)
 
 
 func _on_index_pressed() -> void:
@@ -90,6 +98,10 @@ func _on_finished() -> void:
 	progress_label.text = "Indexování dokončeno. Souborů: %d, unikátních slov: %d" % [Indexer.indexed_files.size(), Indexer.index_data.size()]
 	index_button.disabled = false
 	pick_button.disabled = false
+
+	if Indexer.indexed_files.size() == 0:
+		_run_diagnostics(Indexer.selected_folder)
+		diagnostics_label.text = "Diagnostika 0 souborů:\n" + diagnostics_label.text
 
 
 func _on_back_pressed() -> void:

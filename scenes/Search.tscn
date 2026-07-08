@@ -27,26 +27,26 @@ theme_override_constants/separation = 16
 [node name="TitleLabel" type="Label" parent="VBoxContainer/TopBar" unique_id=806078833]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 34
+theme_override_font_sizes/font_size = 52
 text = "Vyhledávání"
 
 [node name="SettingsButton" type="Button" parent="VBoxContainer/TopBar" unique_id=605182552]
 custom_minimum_size = Vector2(0, 140)
 layout_mode = 2
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 30
 text = "Nastavení"
 
 [node name="StatusLabel" type="Label" parent="VBoxContainer" unique_id=73390052]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 26
 text = "Status"
 autowrap_mode = 2
 
 [node name="SearchEdit" type="LineEdit" parent="VBoxContainer" unique_id=446458354]
 custom_minimum_size = Vector2(0, 140)
 layout_mode = 2
-theme_override_font_sizes/font_size = 30
+theme_override_font_sizes/font_size = 32
 placeholder_text = "Zadej hledaná slova..."
 
 [node name="ScrollContainer" type="ScrollContainer" parent="VBoxContainer" unique_id=33971371]
