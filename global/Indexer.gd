@@ -66,9 +66,25 @@ var indexing_status_text: String = ""
 signal indexing_finished
 signal indexing_progress_changed(progress: float, status: String)
 
+# Předkompilované regexy (viz _ready) - znovupoužité pro každý soubor.
+var _re_word := RegEx.new()
+var _re_comment := RegEx.new()
+var _re_tag := RegEx.new()
+var _re_ws := RegEx.new()
+var _re_nl := RegEx.new()
+
 func _ready() -> void:
 	load_settings()
 	load_index()
+
+	# Regulární výrazy kompilujeme jen JEDNOU při startu, ne pokaždé pro
+	# každý soubor - kompilace regexu je řádově dražší než jeho použití,
+	# a u velkého množství souborů to byl citelný podíl celkového času.
+	_re_word.compile("[\\p{L}\\p{N}_]+")
+	_re_comment.compile("<!--[\\s\\S]*?-->")
+	_re_tag.compile("<[^>]*>")
+	_re_ws.compile("[ \\t]+")
+	_re_nl.compile("\\n{3,}")
 
 	# Přímé, za-běhu nastavení orientace - nezávisí na tom, co (ne)obsahuje
 	# vygenerovaný AndroidManifest.xml, takže by mělo fungovat i kdyby export
@@ -242,10 +258,7 @@ func _diag_scan_recursive(path: String, out: Dictionary, depth: int) -> void:
 # ---------------------------------------------------------------------------
 
 func save_settings() -> void:
-	var f := FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)
-	if f:
-		f.store_string(JSON.stringify({"folder": selected_folder, "reader_font_size": reader_font_size}))
-		f.close()
+	_write_json_atomic(SETTINGS_PATH, {"folder": selected_folder, "reader_font_size": reader_font_size})
 
 func load_settings() -> void:
 	if not FileAccess.file_exists(SETTINGS_PATH):
@@ -261,10 +274,7 @@ func load_settings() -> void:
 		reader_font_size = int(parsed["reader_font_size"])
 
 func save_index() -> void:
-	var f := FileAccess.open(INDEX_PATH, FileAccess.WRITE)
-	if f:
-		f.store_string(JSON.stringify({"words": index_data, "files": indexed_files, "time": last_index_time}))
-		f.close()
+	_write_json_atomic(INDEX_PATH, {"words": index_data, "files": indexed_files, "time": last_index_time})
 
 func load_index() -> void:
 	if not FileAccess.file_exists(INDEX_PATH):
@@ -283,6 +293,19 @@ func load_index() -> void:
 			# zpětná kompatibilita se starším formátem indexu
 			index_data = parsed
 			indexed_files = []
+	_sorted_words_dirty = true
+
+
+# Kompletně smaže starý index (kdyby byl poškozený/zastaralý) i případný
+# rozpracovaný (nedokončený) stav indexování, ať se dá začít úplně od nuly.
+func clear_index() -> void:
+	index_data.clear()
+	indexed_files.clear()
+	last_index_time = 0
+	_sorted_words_dirty = true
+	if FileAccess.file_exists(INDEX_PATH):
+		DirAccess.remove_absolute(INDEX_PATH)
+	_clear_indexing_state()
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +339,8 @@ func index_folder_async(path: String, resume: bool = false) -> void:
 		indexing_progress_changed.emit(0.0, indexing_status_text)
 		await _collect_files_async(path, files)
 
+	_sorted_words_dirty = true
+
 	var total := files.size()
 	if total == 0:
 		is_indexing = false
@@ -324,45 +349,85 @@ func index_folder_async(path: String, resume: bool = false) -> void:
 		indexing_finished.emit()
 		return
 
+	var last_checkpoint_ms := Time.get_ticks_msec()
+
 	for i in range(start_index, total):
 		var file_path: String = files[i]
 		_index_file(file_path)
 		indexed_files.append(file_path)
-		indexing_progress = float(i + 1) / float(total)
-		indexing_status_text = "Indexuji (%d/%d): %s" % [i + 1, total, file_path.get_file()]
-		indexing_progress_changed.emit(indexing_progress, indexing_status_text)
+
+		# Progress a "pusť enginu na frame" děláme jen po dávkách, ne po
+		# každém souboru - čekání na frame po každém jednom souboru tvrdě
+		# omezovalo rychlost na max. FPS souborů/s (typicky 60/s), i kdyby
+		# to appka jinak zvládla mnohem rychleji.
+		if (i + 1) % INDEX_YIELD_EVERY == 0 or i == total - 1:
+			indexing_progress = float(i + 1) / float(total)
+			indexing_status_text = "Indexuji (%d/%d): %s" % [i + 1, total, file_path.get_file()]
+			indexing_progress_changed.emit(indexing_progress, indexing_status_text)
 
 		# Průběžné ukládání rozpracovaného stavu - kdyby appka spadla nebo
 		# ji systém uprostřed zabil, půjde po znovuotevření navázat místo
-		# toho, aby se muselo začínat od nuly. Neděláme to po každém
-		# souboru (drahé kvůli zápisu na disk), ale po dávkách.
-		if (i + 1) % CHECKPOINT_EVERY == 0:
+		# toho, aby se muselo začínat od nuly. Ukládáme podle UPLYNULÉHO ČASU
+		# (ne podle pevného počtu souborů) - u malých/přerušených běhů se tak
+		# garantuje aspoň jeden checkpoint, i kdyby appka spadla po pár
+		# sekundách, dřív než by se stihlo projít třeba 150 souborů.
+		if Time.get_ticks_msec() - last_checkpoint_ms >= CHECKPOINT_INTERVAL_MS:
 			_save_indexing_state(path, files, i + 1)
+			last_checkpoint_ms = Time.get_ticks_msec()
 
-		# necháme frame proběhnout, aby UI nezamrzlo při velkém množství souborů
-		await Engine.get_main_loop().process_frame
+		if (i + 1) % INDEX_YIELD_EVERY == 0:
+			await Engine.get_main_loop().process_frame
 
 	last_index_time = Time.get_unix_time_from_system()
+	_sorted_words_dirty = true
 	save_index()
 	_clear_indexing_state()
 	is_indexing = false
 	indexing_finished.emit()
 
 
-const CHECKPOINT_EVERY := 25
+const CHECKPOINT_INTERVAL_MS := 60000  # jak často (v ms) se ukládá rozpracovaný stav
+const INDEX_YIELD_EVERY := 10    # jak často appka "pustí" frame enginu (UI responsivita)
+
+
+# ---------------------------------------------------------------------------
+# Atomický zápis na disk
+# ---------------------------------------------------------------------------
+# Zápis rovnou do cílového souboru je nebezpečný - pokud appku systém zabije
+# (nebo spadne) přesně UPROSTŘED zápisu (u velkých JSON souborů, jako je
+# rozpracovaný stav indexování u tisíců souborů, to není zanedbatelná doba),
+# vznikne napůl zapsaný, poškozený soubor. Při dalším čtení se nepovede
+# rozparsovat a appka o něm tak potichu "neví" - i když tam reálně nějaký
+# postup byl.
+#
+# Řešení: napřed zapsat do dočasného souboru (*.tmp), a teprve po úspěšném
+# zápisu ho přejmenovat na cílový název. Přejmenování je (na běžných
+# souborových systémech) prakticky okamžité, takže riziko zásahu přesně v tu
+# nepatrnou chvíli je zanedbatelné - buď existuje starý kompletní soubor,
+# nebo už nový kompletní soubor, nikdy nic mezi tím.
+func _write_json_atomic(path: String, data) -> bool:
+	var tmp_path := path + ".tmp"
+	var f := FileAccess.open(tmp_path, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(JSON.stringify(data))
+	f.close()
+
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	var err := DirAccess.rename_absolute(tmp_path, path)
+	return err == OK
+
 
 func _save_indexing_state(path: String, files: Array, current_index: int) -> void:
-	var f := FileAccess.open(INDEXING_STATE_PATH, FileAccess.WRITE)
-	if f:
-		f.store_string(JSON.stringify({
-			"folder": path,
-			"files": files,
-			"current_index": current_index,
-			"total": files.size(),
-			"words": index_data,
-			"indexed_files": indexed_files,
-		}))
-		f.close()
+	_write_json_atomic(INDEXING_STATE_PATH, {
+		"folder": path,
+		"files": files,
+		"current_index": current_index,
+		"total": files.size(),
+		"words": index_data,
+		"indexed_files": indexed_files,
+	})
 
 func _load_indexing_state() -> Dictionary:
 	if not FileAccess.file_exists(INDEXING_STATE_PATH):
@@ -475,10 +540,7 @@ func _index_file(file_path: String) -> void:
 
 func _tokenize(text: String) -> Array:
 	var lower := text.to_lower()
-	var regex := RegEx.new()
-	# \p{L} = libovolné písmeno (včetně diakritiky), \p{N} = číslice, _ kvůli identifikátorům v kódu
-	regex.compile("[\\p{L}\\p{N}_]+")
-	var found := regex.search_all(lower)
+	var found := _re_word.search_all(lower)
 	var words: Array = []
 	for m in found:
 		var w: String = m.get_string()
@@ -500,14 +562,10 @@ func strip_markup(text: String) -> String:
 	result = _strip_block(result, "<style", "</style>")
 
 	# 2) Odstranit HTML komentáře <!-- ... -->
-	var comment_re := RegEx.new()
-	comment_re.compile("<!--[\\s\\S]*?-->")
-	result = comment_re.sub(result, "", true)
+	result = _re_comment.sub(result, "", true)
 
 	# 3) Odstranit zbylé HTML značky <...>
-	var tag_re := RegEx.new()
-	tag_re.compile("<[^>]*>")
-	result = tag_re.sub(result, " ", true)
+	result = _re_tag.sub(result, " ", true)
 
 	# 4) Dekódovat běžné HTML entity
 	result = result.replace("&nbsp;", " ")
@@ -518,13 +576,8 @@ func strip_markup(text: String) -> String:
 	result = result.replace("&#39;", "'")
 
 	# 5) Sloučit nadbytečné bílé znaky
-	var ws_re := RegEx.new()
-	ws_re.compile("[ \\t]+")
-	result = ws_re.sub(result, " ", true)
-
-	var nl_re := RegEx.new()
-	nl_re.compile("\\n{3,}")
-	result = nl_re.sub(result, "\n\n", true)
+	result = _re_ws.sub(result, " ", true)
+	result = _re_nl.sub(result, "\n\n", true)
 
 	return result.strip_edges()
 
@@ -555,6 +608,47 @@ func _strip_block(text: String, start_tag: String, end_tag: String) -> String:
 # Vyhledávání
 # ---------------------------------------------------------------------------
 
+# Seřazené pole všech slov v indexu - umožňuje binární vyhledávání (O(log n))
+# místo lineárního průchodu přes všechna slova (O(n)) při každém hledání.
+# Přebuduje se líně, jen když se index mezitím opravdu změnil.
+var _sorted_words: Array = []
+var _sorted_words_dirty: bool = true
+
+func _ensure_sorted_words() -> void:
+	if not _sorted_words_dirty:
+		return
+	_sorted_words = index_data.keys()
+	_sorted_words.sort()
+	_sorted_words_dirty = false
+
+
+# Vrátí všechna slova z indexu, která ZAČÍNAJÍ na "term" - přes binární
+# vyhledávání v seřazeném poli (rychlé i na desetitisících slov).
+#
+# Pozn.: tohle najde jen shody OD ZAČÁTKU slova (prefix), ne "kdekoli uvnitř"
+# jako předtím (např. "dex" najde "index" jen v novém způsobu, kdyby to bylo
+# "kdekoli uvnitř"; v prefixovém způsobu "dex" nenajde "index", ale "inde"
+# ano). Binární vyhledávání funguje jen díky tomu, že seřazená slova se
+# stejným začátkem leží v poli hned vedle sebe - "kdekoli uvnitř" by binární
+# vyhledávání využít nešlo (vyžadovalo by mnohem složitější strukturu jako
+# suffix trie), takže by hledání zůstalo pomalé O(n). V praxi prefixové
+# hledání pokryje naprostou většinu běžného použití (psaní od začátku slova).
+func _matching_words(term: String) -> Array:
+	var n := _sorted_words.size()
+	if n == 0:
+		return []
+
+	# bsearch najde první index, kde by "term" šlo vložit a pole zůstalo
+	# seřazené - tedy první slovo >= term.
+	var start := _sorted_words.bsearch(term, true)
+	var result: Array = []
+	var i := start
+	while i < n and (_sorted_words[i] as String).begins_with(term):
+		result.append(_sorted_words[i])
+		i += 1
+	return result
+
+
 func search(query: String) -> Array:
 	query = strip_diacritics(query.strip_edges().to_lower())
 	if query.is_empty():
@@ -564,17 +658,18 @@ func search(query: String) -> Array:
 	if terms.is_empty():
 		return []
 
+	_ensure_sorted_words()
+
 	# Pro každé zadané slovo zjistíme, které soubory ho obsahují (a s jakým
 	# součtem výskytů), pak uděláme průnik - musí sedět VŠECHNA zadaná slova.
 	var matches_per_term: Array = []  # Array[Dictionary: file_path -> count]
 
 	for term in terms:
 		var term_matches: Dictionary = {}
-		for word in index_data.keys():
-			if word.find(term) != -1:
-				var files_dict: Dictionary = index_data[word]
-				for fp in files_dict.keys():
-					term_matches[fp] = term_matches.get(fp, 0) + int(files_dict[fp])
+		for word in _matching_words(term):
+			var files_dict: Dictionary = index_data[word]
+			for fp in files_dict.keys():
+				term_matches[fp] = term_matches.get(fp, 0) + int(files_dict[fp])
 		matches_per_term.append(term_matches)
 
 	var common_files: Dictionary = matches_per_term[0].duplicate()

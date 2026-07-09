@@ -3,18 +3,22 @@ extends Control
 @onready var folder_label: Label = $ScrollContainer/VBoxContainer/FolderLabel
 @onready var diagnostics_label: Label = $ScrollContainer/VBoxContainer/DiagnosticsLabel
 @onready var pick_button: Button = $ScrollContainer/VBoxContainer/PickFolderButton
+@onready var clear_index_button: Button = $ScrollContainer/VBoxContainer/ClearIndexButton
 @onready var index_button: Button = $ScrollContainer/VBoxContainer/IndexButton
 @onready var progress_bar: ProgressBar = $ScrollContainer/VBoxContainer/ProgressBar
 @onready var progress_label: Label = $ScrollContainer/VBoxContainer/ProgressLabel
 @onready var back_button: Button = $ScrollContainer/VBoxContainer/BackButton
 @onready var permission_button: Button = $ScrollContainer/VBoxContainer/PermissionButton
 @onready var permission_info_dialog: AcceptDialog = $PermissionInfoDialog
+@onready var clear_index_confirm_dialog: ConfirmationDialog = $ClearIndexConfirmDialog
 
 var _pending_resume: bool = false
 
 
 func _ready() -> void:
 	pick_button.pressed.connect(_on_pick_folder)
+	clear_index_button.pressed.connect(_on_clear_index_pressed)
+	clear_index_confirm_dialog.confirmed.connect(_on_clear_index_confirmed)
 	index_button.pressed.connect(_on_index_pressed)
 	back_button.pressed.connect(_on_back_pressed)
 	permission_button.pressed.connect(_on_permission_pressed)
@@ -88,6 +92,20 @@ func _on_pick_folder() -> void:
 	var browser := preload("res://scenes/FolderBrowser.tscn").instantiate()
 	add_child(browser)
 	browser.folder_selected.connect(_on_folder_selected)
+
+
+func _on_clear_index_pressed() -> void:
+	clear_index_confirm_dialog.popup_centered()
+
+
+func _on_clear_index_confirmed() -> void:
+	Indexer.clear_index()
+	_pending_resume = false
+	index_button.text = "Indexovat"
+	progress_label.visible = true
+	progress_label.text = "Starý index byl smazán."
+	if Indexer.selected_folder != "":
+		_run_diagnostics(Indexer.selected_folder)
 
 
 func _on_folder_selected(path: String) -> void:

@@ -52,6 +52,12 @@ custom_minimum_size = Vector2(0, 150)
 theme_override_font_sizes/font_size = 34
 text = "Vybrat složku"
 
+[node name="ClearIndexButton" type="Button" parent="ScrollContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 150)
+theme_override_font_sizes/font_size = 34
+text = "Smazat starý index"
+
 [node name="IndexButton" type="Button" parent="ScrollContainer/VBoxContainer"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 150)
@@ -79,3 +85,10 @@ text = "Zpět"
 title = "Přístup k souborům"
 size = Vector2i(900, 500)
 ok_button_text = "Rozumím"
+
+[node name="ClearIndexConfirmDialog" type="ConfirmationDialog" parent="."]
+title = "Smazat index?"
+size = Vector2i(900, 400)
+dialog_text = "Opravdu smazat aktuální index (i případné rozpracované indexování)? Tuhle akci nejde vrátit zpět."
+ok_button_text = "Smazat"
+cancel_button_text = "Zrušit"
