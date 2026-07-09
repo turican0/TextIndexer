@@ -38,6 +38,7 @@ text = "Nastavení"
 
 [node name="StatusLabel" type="Label" parent="VBoxContainer" unique_id=73390052]
 layout_mode = 2
+autowrap_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 26
 text = "Status"

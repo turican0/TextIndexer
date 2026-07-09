@@ -38,11 +38,20 @@ func _on_debounce_timeout() -> void:
 func _update_status() -> void:
 	var word_count := Indexer.index_data.size()
 	var file_count := Indexer.indexed_files.size()
+
+	var resumable := Indexer.get_resumable_indexing_info()
+	var resume_note := ""
+	if resumable.size() > 0:
+		resume_note = "\n⚠ Nedokončené indexování (%d/%d souborů) - dokonči ho v Nastavení." % [resumable["current"], resumable["total"]]
+
 	if word_count == 0:
-		status_label.text = "Index je prázdný. Přejdi do Nastavení a naindexuj složku."
+		status_label.text = "Index je prázdný. Přejdi do Nastavení a naindexuj složku." + resume_note
 	else:
 		var folder := Indexer.selected_folder
-		status_label.text = "Souborů: %d   |   Unikátních slov: %d   |   Složka: %s" % [file_count, word_count, folder]
+		var when := "nikdy"
+		if Indexer.last_index_time > 0:
+			when = Time.get_datetime_string_from_unix_time(Indexer.last_index_time, true).replace("T", " ")
+		status_label.text = "Souborů: %d   |   Unikátních slov: %d   |   Složka: %s\nNaposledy zaindexováno: %s%s" % [file_count, word_count, folder, when, resume_note]
 
 
 func _on_settings_pressed() -> void:
@@ -60,7 +69,11 @@ func _run_search(new_text: String) -> void:
 
 	if results.is_empty():
 		var lbl := Label.new()
-		lbl.text = "Nic nenalezeno."
+		if Indexer.index_data.is_empty():
+			lbl.text = "Nic nenalezeno - index je prázdný (žádná složka ještě nebyla úspěšně zaindexována)."
+		else:
+			lbl.text = "Nic nenalezeno. (Index obsahuje %d souborů / %d slov, ale hledaný výraz v nich není.)" % [Indexer.indexed_files.size(), Indexer.index_data.size()]
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
 		lbl.add_theme_color_override("font_color", Color.BLACK)
 		results_container.add_child(lbl)
 		return

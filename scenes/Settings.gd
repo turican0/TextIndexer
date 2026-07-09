@@ -10,6 +10,8 @@ extends Control
 @onready var permission_button: Button = $ScrollContainer/VBoxContainer/PermissionButton
 @onready var permission_info_dialog: AcceptDialog = $PermissionInfoDialog
 
+var _pending_resume: bool = false
+
 
 func _ready() -> void:
 	pick_button.pressed.connect(_on_pick_folder)
@@ -34,6 +36,27 @@ func _ready() -> void:
 	# jestli je reálně čitelná.
 	if Indexer.selected_folder != "":
 		_run_diagnostics(Indexer.selected_folder)
+
+	_check_resumable()
+
+
+func _check_resumable() -> void:
+	var info := Indexer.get_resumable_indexing_info()
+	if info.size() == 0:
+		_pending_resume = false
+		index_button.text = "Indexovat"
+		return
+
+	if info["folder"] == Indexer.selected_folder:
+		_pending_resume = true
+		index_button.text = "Pokračovat v indexování (%d/%d)" % [info["current"], info["total"]]
+		progress_label.visible = true
+		progress_label.text = "Předchozí indexování se nedokončilo (%d/%d souborů). Klikni na tlačítko výše pro pokračování." % [info["current"], info["total"]]
+	else:
+		_pending_resume = false
+		index_button.text = "Indexovat"
+		progress_label.visible = true
+		progress_label.text = "Pozn.: existuje nedokončené indexování jiné složky (%s, %d/%d). Vyber ji znovu pro pokračování." % [info["folder"], info["current"], info["total"]]
 
 
 func _refresh_folder_label() -> void:
@@ -72,6 +95,7 @@ func _on_folder_selected(path: String) -> void:
 	Indexer.save_settings()
 	_refresh_folder_label()
 	_run_diagnostics(path)
+	_check_resumable()
 
 
 func _on_index_pressed() -> void:
@@ -86,7 +110,7 @@ func _on_index_pressed() -> void:
 	index_button.disabled = true
 	pick_button.disabled = true
 
-	Indexer.index_folder_async(Indexer.selected_folder)
+	Indexer.index_folder_async(Indexer.selected_folder, _pending_resume)
 
 
 func _on_progress(progress: float, status: String) -> void:
@@ -98,6 +122,8 @@ func _on_finished() -> void:
 	progress_label.text = "Indexování dokončeno. Souborů: %d, unikátních slov: %d" % [Indexer.indexed_files.size(), Indexer.index_data.size()]
 	index_button.disabled = false
 	pick_button.disabled = false
+	_pending_resume = false
+	index_button.text = "Indexovat"
 
 	if Indexer.indexed_files.size() == 0:
 		_run_diagnostics(Indexer.selected_folder)
