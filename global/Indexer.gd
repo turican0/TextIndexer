@@ -300,7 +300,10 @@ func index_folder_async(path: String) -> void:
 	indexed_files.clear()
 
 	var files: Array = []
-	_collect_files(path, files)
+	_scan_counter = 0
+	indexing_status_text = "Prohledávám složky..."
+	indexing_progress_changed.emit(0.0, indexing_status_text)
+	await _collect_files_async(path, files)
 
 	var total := files.size()
 	if total == 0:
@@ -324,7 +327,15 @@ func index_folder_async(path: String) -> void:
 	indexing_finished.emit()
 
 
-func _collect_files(path: String, out_files: Array) -> void:
+var _scan_counter: int = 0
+
+# Kolik položek (souborů + podsložek) zkontrolovat mezi jednotlivými "nádechy"
+# (návraty enginu). Menší číslo = plynulejší UI, ale pomalejší celkové
+# prohledání; větší číslo = rychlejší, ale méně plynulé updaty. 60 je rozumný
+# kompromis - UI se aktualizuje typicky několikrát za sekundu i na obřím stromu.
+const SCAN_YIELD_EVERY := 60
+
+func _collect_files_async(path: String, out_files: Array) -> void:
 	var dir := DirAccess.open(path)
 	if dir == null:
 		return
@@ -335,14 +346,20 @@ func _collect_files(path: String, out_files: Array) -> void:
 			var full_path := path.path_join(name)
 			if dir.current_is_dir():
 				if not (name in SKIP_DIRECTORIES):
-					_collect_files(full_path, out_files)
+					await _collect_files_async(full_path, out_files)
 			else:
 				var ext := name.get_extension().to_lower()
-				if ext in SKIP_EXTENSIONS:
-					name = dir.get_next()
-					continue
-				if _is_probably_text(full_path):
+				if not (ext in SKIP_EXTENSIONS) and _is_probably_text(full_path):
 					out_files.append(full_path)
+
+			_scan_counter += 1
+			if _scan_counter % SCAN_YIELD_EVERY == 0:
+				indexing_status_text = "Prohledávám složky... (nalezeno %d souborů, zkontrolováno %d položek)" % [out_files.size(), _scan_counter]
+				# Progress bar tady nemá reálné 0-100 %, protože celkový počet
+				# ještě neznáme - jen "pulzuje" v cyklu 0-100, ať je vidět, že
+				# to opravdu pracuje a nezaseklo se to.
+				indexing_progress_changed.emit(float(_scan_counter % 100) / 100.0, indexing_status_text)
+				await Engine.get_main_loop().process_frame
 		name = dir.get_next()
 	dir.list_dir_end()
 
