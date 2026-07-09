@@ -11,17 +11,10 @@ const SETTINGS_PATH := "user://settings.json"
 const INDEX_PATH := "user://index.json"
 const INDEXING_STATE_PATH := "user://indexing_state.json"  # rozpracovaný (nedokončený) běh indexace
 
-# Přípony, které rovnou přeskočíme bez otevírání (typicky binární/mediální
-# soubory) - čistě kvůli rychlosti, aby se nemusel číst obsah úplně
-# každého souboru. Vše ostatní se posoudí podle obsahu (viz _is_probably_text).
-const SKIP_EXTENSIONS := [
-	"png", "jpg", "jpeg", "gif", "bmp", "webp", "ico", "tga", "exr", "hdr",
-	"mp3", "wav", "ogg", "flac", "mp4", "avi", "mov", "mkv", "webm",
-	"zip", "rar", "7z", "tar", "gz", "bz2",
-	"exe", "dll", "so", "dylib", "bin", "dat", "db", "sqlite", "sqlite3",
-	"ttf", "otf", "woff", "woff2", "pdf",
-	"doc", "docx", "xls", "xlsx", "ppt", "pptx",
-	"class", "jar", "pyc", "o", "obj", "a", "lib", "apk", "aab"
+# Bílá listina - indexují se JEN soubory s těmito příponami. Vše ostatní se
+# přeskočí rovnou bez otevírání.
+const ALLOWED_EXTENSIONS := [
+	"htm", "html", "shtml", "php", "txt"
 ]
 
 # Soubory větší než tohle se přeskočí (kvůli výkonu na mobilu).
@@ -422,7 +415,7 @@ func _collect_files_async(path: String, out_files: Array) -> void:
 					await _collect_files_async(full_path, out_files)
 			else:
 				var ext := name.get_extension().to_lower()
-				if not (ext in SKIP_EXTENSIONS) and _is_probably_text(full_path):
+				if (ext in ALLOWED_EXTENSIONS) and _is_probably_text(full_path):
 					out_files.append(full_path)
 
 			_scan_counter += 1
