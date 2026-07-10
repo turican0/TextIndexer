@@ -62,7 +62,16 @@ func _run_search(new_text: String) -> void:
 	for child in results_container.get_children():
 		child.queue_free()
 
-	if new_text.strip_edges().is_empty():
+	var trimmed := new_text.strip_edges()
+	if trimmed.is_empty():
+		return
+
+	if trimmed.length() < 3:
+		var lbl := Label.new()
+		lbl.text = "Napiš aspoň 3 znaky - kratší slova se neindexují."
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+		lbl.add_theme_color_override("font_color", Color.BLACK)
+		results_container.add_child(lbl)
 		return
 
 	var results := Indexer.search(new_text)
@@ -91,6 +100,12 @@ func _run_search(new_text: String) -> void:
 		btn.add_theme_color_override("font_color", Color.BLACK)
 		btn.add_theme_color_override("font_hover_color", Color.BLACK)
 		btn.add_theme_color_override("font_pressed_color", Color.BLACK)
+		# Bez tohohle tlačítko "spolklo" dotykové gesto ještě předtím, než se
+		# dostalo k obalujícímu ScrollContaineru - PASS zajistí, že se přes
+		# tlačítko dá pořád normálně kliknout (tap), ale zároveň gesto
+		# doputuje i výš, takže ScrollContainer může scrollovat i tažením
+		# prstem přes seznam tlačítek.
+		btn.mouse_filter = Control.MOUSE_FILTER_PASS
 		btn.pressed.connect(_on_result_pressed.bind(file_path))
 		results_container.add_child(btn)
 

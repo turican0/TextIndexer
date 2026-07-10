@@ -37,6 +37,12 @@ const ALLOWED_EXTENSIONS := [
 # Soubory větší než tohle se přeskočí (kvůli výkonu na mobilu).
 const MAX_FILE_SIZE_BYTES := 4 * 1024 * 1024  # 4 MB
 
+# Soubory menší než tohle se taky přeskočí - obvykle jde o prázdné/skoro
+# prázdné soubory (přesměrování, zápatí, placeholdery...), které nemají
+# smysluplný obsah k vyhledávání, ale v indexu by zbytečně přidávaly
+# záznamy navíc.
+const MIN_FILE_SIZE_BYTES := 3 * 1024  # 3 KB
+
 # Mapa pro odstranění diakritiky (čeština/slovenština + běžné latinské akcenty),
 # aby hledání fungovalo bez ohledu na háčky/čárky.
 const DIACRITICS_MAP := {
@@ -675,9 +681,9 @@ func _is_probably_text(file_path: String) -> bool:
 	if f == null:
 		return false
 	var length := f.get_length()
-	if length == 0:
+	if length < MIN_FILE_SIZE_BYTES:
 		f.close()
-		return true
+		return false
 	if length > MAX_FILE_SIZE_BYTES:
 		f.close()
 		return false
@@ -725,7 +731,7 @@ func _tokenize(text: String) -> Array:
 	for m in found:
 		var w: String = m.get_string()
 		w = strip_diacritics(w)
-		if w.length() >= 2 and not STOPWORDS.has(w):
+		if w.length() >= 3 and not STOPWORDS.has(w):
 			words.append(w)
 	return words
 

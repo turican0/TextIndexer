@@ -31,10 +31,11 @@ size_flags_vertical = 3
 [node name="TextLabel" type="RichTextLabel" parent="VBoxContainer/ScrollContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
+mouse_filter = 1
 bbcode_enabled = false
 scroll_active = false
 fit_content = true
-selection_enabled = true
+selection_enabled = false
 theme_override_font_sizes/normal_font_size = 34
 theme_override_constants/line_separation = 10
 
