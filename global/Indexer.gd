@@ -8,8 +8,25 @@ extends Node
 # ---------------------------------------------------------------------------
 
 const SETTINGS_PATH := "user://settings.json"
-const INDEX_PATH := "user://index.json"
-const INDEXING_STATE_PATH := "user://indexing_state.json"  # rozpracovaný (nedokončený) běh indexace
+
+# Index, rozpracovaný stav a seznam souborů k indexaci se ukládají binárně
+# (Variant) + gzip komprimovaně, ne jako čitelný JSON text. Číselné hodnoty
+# (počty výskytů, file_id) se tak ukládají jako čísla, ne jako text, a gzip
+# navrch odstraní opakující se vzory ve struktuře - výsledné soubory jsou
+# výrazně menší a rychlejší na zápis/čtení než ekvivalentní JSON, což je
+# důležité hlavně u indexu, který bez téhle úpravy dokázal appku shazovat
+# kvůli nedostatku paměti.
+const INDEX_PATH := "user://index.bin"
+const INDEXING_STATE_PATH := "user://indexing_state.bin"  # rozpracovaný (nedokončený) běh indexace - jen to, co se mění
+const INDEXING_FILELIST_PATH := "user://indexing_filelist.bin"  # seznam souborů k indexaci - uloží se jednou, neměnní se
+
+# Staré (čitelné JSON) cesty z předchozí verze appky - používají se JEN pro
+# jednorázovou migraci hlavního indexu při startu (viz _migrate_legacy_index),
+# ať uživatel nemusí po aktualizaci indexovat znovu od nuly. Rozpracovaný stav
+# a filelist se nemigrují - jsou to jen dočasná data pro navázání přerušené
+# indexace, takže při aktualizaci appky uprostřed indexování se v nejhorším
+# případě jen znovu spustí od začátku, což je v pořádku.
+const INDEX_PATH_LEGACY_JSON := "user://index.json"
 
 # Bílá listina - indexují se JEN soubory s těmito příponami. Vše ostatní se
 # přeskočí rovnou bez otevírání.
@@ -47,10 +64,43 @@ func strip_diacritics(text: String) -> String:
 		result += DIACRITICS_MAP.get(ch, ch)
 	return result
 
+
+# Nejčastější česká/slovenská "gramatická" slova (spojky, předložky, zájmena,
+# tvary "být" atd.) - v naprosté většině textových souborů se vyskytují
+# skoro na každé stránce, takže mají v indexu obrovské seznamy souborů, ale
+# k samotnému hledání konkrétního obsahu prakticky nepomáhají. Přeskočením
+# se výrazně zmenší jak počet unikátních položek v indexu, tak hlavně délka
+# seznamů u těch pár slov, co skutečně zůstanou. Klíče jsou už bez diakritiky
+# (stejně jako výstup _tokenize), aby seděly na to, co se reálně porovnává.
+# Seznam je záměrně jen orientační/rozšiřitelný, ne lingvisticky úplný.
+const STOPWORDS := {
+	"a": true, "i": true, "o": true, "u": true, "k": true, "s": true, "v": true, "z": true,
+	"se": true, "si": true, "je": true, "na": true, "do": true, "za": true, "po": true,
+	"ze": true, "ale": true, "nebo": true, "jako": true, "tak": true, "uz": true,
+	"ted": true, "ktery": true, "ktera": true, "ktere": true, "tento": true, "tato": true,
+	"toto": true, "tyto": true, "jsem": true, "jsi": true, "jsme": true, "jste": true,
+	"jsou": true, "byl": true, "byla": true, "bylo": true, "byli": true, "bude": true,
+	"budou": true, "ma": true, "maji": true, "ani": true, "aby": true, "kdyz": true,
+	"protoze": true, "tim": true, "tomu": true, "jeho": true, "jeji": true, "jejich": true,
+	"muj": true, "tvuj": true, "nas": true, "vas": true, "ho": true, "ji": true, "mu": true,
+	"tu": true, "tam": true, "tady": true, "ten": true, "ta": true, "to": true, "ti": true,
+	"ty": true, "on": true, "ona": true, "ono": true, "oni": true, "ony": true,
+	"my": true, "vy": true, "ja": true, "at": true,
+}
+
 var selected_folder: String = ""
 var selected_folder_raw: String = ""  # původní cesta/URI vrácená systémovým výběrem, před převodem
 var reader_font_size: int = 36
-var index_data: Dictionary = {}      # slovo -> { cesta_k_souboru: pocet_vyskytu }
+# slovo -> PackedInt32Array dvojic [file_id, pocet, file_id, pocet, ...].
+# Proč PackedInt32Array a ne vnořený Dictionary{file_id: pocet}: Godot
+# Dictionary má na KAŽDOU instanci (i s 2-3 položkami) poměrně velkou pevnou
+# režii (hashovací tabulka, buckety). Při desítkách/stovkách tisíc unikátních
+# slov to znamenalo stovky tisíc samostatných Dictionary objektů jen kvůli
+# téhle režii navíc k datům samotným - a to byl hlavní zdroj paměťového
+# tlaku (appka padala i po přechodu na binární uložení, protože ten problém
+# je za BĚHU v paměti, ne jen na disku). PackedInt32Array ukládá čísla jako
+# hutné pole bez téhle režie na položku, takže je výrazně úspornější.
+var index_data: Dictionary = {}
 var indexed_files: Array = []        # seznam všech zaindexovaných souborů
 var last_index_time: int = 0         # unix čas poslední ÚSPĚŠNĚ dokončené indexace (0 = nikdy)
 var current_reader_path: String = "" # cesta k souboru, který se má otevřít v Readeru
@@ -273,27 +323,99 @@ func load_settings() -> void:
 	if typeof(parsed) == TYPE_DICTIONARY and parsed.has("reader_font_size"):
 		reader_font_size = int(parsed["reader_font_size"])
 
+# Verze formátu indexu - ponechána i v binárním formátu pro budoucí snazší
+# Verze formátu indexu - ponechána i v binárním formátu pro budoucí snazší
+# rozlišení nekompatibilních dat. Verze 4 = hodnota index_data[slovo] je
+# PackedInt32Array párů [file_id, pocet] (dřív to byl vnořený Dictionary,
+# co měl na mobilu příliš velkou paměťovou režii při stovkách tisíc slov).
+const INDEX_FORMAT_VERSION := 4
+
 func save_index() -> void:
-	_write_json_atomic(INDEX_PATH, {"words": index_data, "files": indexed_files, "time": last_index_time})
+	_write_var_compressed(INDEX_PATH, {
+		"version": INDEX_FORMAT_VERSION,
+		"words": index_data,
+		"files": indexed_files,
+		"time": last_index_time,
+	})
 
 func load_index() -> void:
-	if not FileAccess.file_exists(INDEX_PATH):
+	var parsed = _read_var_compressed(INDEX_PATH)
+	if typeof(parsed) == TYPE_DICTIONARY and parsed.has("words"):
+		index_data = parsed["words"]
+		indexed_files = parsed.get("files", [])
+		last_index_time = int(parsed.get("time", 0))
+		_sorted_words_dirty = true
 		return
-	var f := FileAccess.open(INDEX_PATH, FileAccess.READ)
+
+	# Nový binární index nenalezen - zkusit převést starší JSON formát
+	# (buď úplně starý s plnou cestou u každého slova, nebo mezitímní
+	# verzi 2 s file_id uloženým jako string), pokud existuje.
+	_migrate_legacy_index()
+	_sorted_words_dirty = true
+
+
+# Převede starý čitelný JSON index (index.json) na nový binární formát a
+# rovnou ho uloží. Zvládá obě starší varianty:
+#   - verze 1 (nebo bez verze): index_data["slovo"] = {"cesta": pocet, ...}
+#   - verze 2/3: index_data["slovo"] = {"file_id_jako_string_nebo_int": pocet, ...}
+#     + samostatné pole "files" s cestami (file_id = pozice v poli)
+# V obou případech výsledek je totéž: index_data["slovo"] = PackedInt32Array
+# párů [file_id, pocet, file_id, pocet, ...] (viz komentář u proměnné
+# index_data výše). Po úspěšném převodu starý soubor smaže, ať uživatel
+# nemusí po aktualizaci appky indexovat znovu od nuly.
+func _migrate_legacy_index() -> bool:
+	if not FileAccess.file_exists(INDEX_PATH_LEGACY_JSON):
+		return false
+	var f := FileAccess.open(INDEX_PATH_LEGACY_JSON, FileAccess.READ)
 	if f == null:
-		return
+		return false
 	var parsed = JSON.parse_string(f.get_as_text())
 	f.close()
-	if typeof(parsed) == TYPE_DICTIONARY:
-		if parsed.has("words"):
-			index_data = parsed["words"]
-			indexed_files = parsed.get("files", [])
-			last_index_time = int(parsed.get("time", 0))
-		else:
-			# zpětná kompatibilita se starším formátem indexu
-			index_data = parsed
-			indexed_files = []
-	_sorted_words_dirty = true
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+
+	var legacy_version := int(parsed.get("version", 1))
+	var old_words: Dictionary = parsed.get("words", parsed)  # fallback pro formát bez obálky
+	var old_files: Array = parsed.get("files", [])
+	last_index_time = int(parsed.get("time", 0))
+
+	index_data.clear()
+	indexed_files.clear()
+
+	if legacy_version >= 2:
+		# file_id už existuje (jako string nebo int klíč) - jen převedeme
+		# vnořený Dictionary na plochý PackedInt32Array párů.
+		indexed_files = old_files
+		for word in old_words.keys():
+			var files_dict: Dictionary = old_words[word]
+			var pairs := PackedInt32Array()
+			for id_key in files_dict.keys():
+				pairs.append(int(id_key))
+				pairs.append(int(files_dict[id_key]))
+			index_data[word] = pairs
+	else:
+		# Nejstarší formát - klíčem byla přímo cesta k souboru, potřebujeme
+		# jí teprve přidělit file_id (a zajistit, že se stejná cesta napříč
+		# různými slovy namapuje na stejné id).
+		var file_id_by_path: Dictionary = {}
+		for word in old_words.keys():
+			var files_dict: Dictionary = old_words[word]
+			var pairs := PackedInt32Array()
+			for path in files_dict.keys():
+				var fid: int
+				if file_id_by_path.has(path):
+					fid = file_id_by_path[path]
+				else:
+					fid = indexed_files.size()
+					indexed_files.append(str(path))
+					file_id_by_path[path] = fid
+				pairs.append(fid)
+				pairs.append(int(files_dict[path]))
+			index_data[word] = pairs
+
+	save_index()
+	DirAccess.remove_absolute(INDEX_PATH_LEGACY_JSON)
+	return true
 
 
 # Kompletně smaže starý index (kdyby byl poškozený/zastaralý) i případný
@@ -305,6 +427,8 @@ func clear_index() -> void:
 	_sorted_words_dirty = true
 	if FileAccess.file_exists(INDEX_PATH):
 		DirAccess.remove_absolute(INDEX_PATH)
+	if FileAccess.file_exists(INDEX_PATH_LEGACY_JSON):
+		DirAccess.remove_absolute(INDEX_PATH_LEGACY_JSON)
 	_clear_indexing_state()
 
 
@@ -322,12 +446,14 @@ func index_folder_async(path: String, resume: bool = false) -> void:
 	if resume:
 		var state := _load_indexing_state()
 		if state.size() > 0 and state.get("folder", "") == path:
-			files = state.get("files", [])
+			files = _load_filelist()
 			start_index = int(state.get("current_index", 0))
 			index_data = state.get("words", {})
 			indexed_files = state.get("indexed_files", [])
 			indexing_status_text = "Navazuji na předchozí indexování (%d/%d)..." % [start_index, files.size()]
 			indexing_progress_changed.emit(float(start_index) / float(max(files.size(), 1)), indexing_status_text)
+			if files.is_empty():
+				resume = false  # seznam souborů se ztratil/poškodil, radši začneme znovu
 		else:
 			resume = false  # uložený stav neodpovídá požadované složce, začneme znovu
 
@@ -338,6 +464,10 @@ func index_folder_async(path: String, resume: bool = false) -> void:
 		indexing_status_text = "Prohledávám složky..."
 		indexing_progress_changed.emit(0.0, indexing_status_text)
 		await _collect_files_async(path, files)
+		# Seznam souborů se od teď do konce běhu neměnní - uložíme ho JEDNOU
+		# zvlášť, ať se nemusí zbytečně znovu a znovu serializovat při
+		# každém průběžném checkpointu (viz níže).
+		_save_filelist(files)
 
 	_sorted_words_dirty = true
 
@@ -353,7 +483,8 @@ func index_folder_async(path: String, resume: bool = false) -> void:
 
 	for i in range(start_index, total):
 		var file_path: String = files[i]
-		_index_file(file_path)
+		var file_id := indexed_files.size()  # index do indexed_files - viz komentář u _index_file
+		_index_file(file_path, file_id)
 		indexed_files.append(file_path)
 
 		# Progress a "pusť enginu na frame" děláme jen po dávkách, ne po
@@ -370,9 +501,10 @@ func index_folder_async(path: String, resume: bool = false) -> void:
 		# toho, aby se muselo začínat od nuly. Ukládáme podle UPLYNULÉHO ČASU
 		# (ne podle pevného počtu souborů) - u malých/přerušených běhů se tak
 		# garantuje aspoň jeden checkpoint, i kdyby appka spadla po pár
-		# sekundách, dřív než by se stihlo projít třeba 150 souborů.
+		# sekundách. Seznam souborů (files) se sem už neukládá, jen to, co
+		# se mezi checkpointy skutečně mění.
 		if Time.get_ticks_msec() - last_checkpoint_ms >= CHECKPOINT_INTERVAL_MS:
-			_save_indexing_state(path, files, i + 1)
+			_save_indexing_state(path, i + 1)
 			last_checkpoint_ms = Time.get_ticks_msec()
 
 		if (i + 1) % INDEX_YIELD_EVERY == 0:
@@ -386,8 +518,12 @@ func index_folder_async(path: String, resume: bool = false) -> void:
 	indexing_finished.emit()
 
 
-const CHECKPOINT_INTERVAL_MS := 60000  # jak často (v ms) se ukládá rozpracovaný stav
-const INDEX_YIELD_EVERY := 10    # jak často appka "pustí" frame enginu (UI responsivita)
+const CHECKPOINT_INTERVAL_MS := 10000  # jak často (v ms) se ukládá rozpracovaný stav
+# Prodlouženo z 3s na 10s: každý checkpoint pořád znamená serializaci CELÉHO
+# dosavadního indexu (jinak by se nedalo navázat), takže i po zmenšení
+# datové struktury (PackedInt32Array) je zbytečné to dělat moc často -
+# stačí garantovat, že se při pádu neztratí víc než pár desítek sekund práce.
+const INDEX_YIELD_EVERY := 8    # jak často appka "pustí" frame enginu (UI responsivita)
 
 
 # ---------------------------------------------------------------------------
@@ -419,31 +555,69 @@ func _write_json_atomic(path: String, data) -> bool:
 	return err == OK
 
 
-func _save_indexing_state(path: String, files: Array, current_index: int) -> void:
-	_write_json_atomic(INDEXING_STATE_PATH, {
+# Binární + gzip komprimovaná varianta téhož atomického zápisu - používá se
+# pro index, rozpracovaný stav a filelist, protože ty bývají u rozsáhlých
+# knihoven řádově větší než nastavení, kde JSON stačí. store_var ukládá
+# hodnoty (včetně int klíčů ve slovnících) přímo binárně, ne jako text, a
+# gzip navrch stlačí opakující se vzory ve struktuře.
+func _write_var_compressed(path: String, data) -> bool:
+	var tmp_path := path + ".tmp"
+	var f := FileAccess.open_compressed(tmp_path, FileAccess.WRITE, FileAccess.COMPRESSION_GZIP)
+	if f == null:
+		return false
+	f.store_var(data, false)
+	f.close()
+
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	var err := DirAccess.rename_absolute(tmp_path, path)
+	return err == OK
+
+
+func _read_var_compressed(path: String):
+	if not FileAccess.file_exists(path):
+		return null
+	var f := FileAccess.open_compressed(path, FileAccess.READ, FileAccess.COMPRESSION_GZIP)
+	if f == null:
+		return null
+	var data = f.get_var(false)
+	f.close()
+	return data
+
+
+func _save_indexing_state(path: String, current_index: int) -> void:
+	_write_var_compressed(INDEXING_STATE_PATH, {
+		"version": INDEX_FORMAT_VERSION,
 		"folder": path,
-		"files": files,
 		"current_index": current_index,
-		"total": files.size(),
 		"words": index_data,
 		"indexed_files": indexed_files,
 	})
 
 func _load_indexing_state() -> Dictionary:
-	if not FileAccess.file_exists(INDEXING_STATE_PATH):
-		return {}
-	var f := FileAccess.open(INDEXING_STATE_PATH, FileAccess.READ)
-	if f == null:
-		return {}
-	var parsed = JSON.parse_string(f.get_as_text())
-	f.close()
-	if typeof(parsed) == TYPE_DICTIONARY:
+	var parsed = _read_var_compressed(INDEXING_STATE_PATH)
+	if typeof(parsed) == TYPE_DICTIONARY and int(parsed.get("version", 1)) >= INDEX_FORMAT_VERSION:
 		return parsed
 	return {}
 
 func _clear_indexing_state() -> void:
 	if FileAccess.file_exists(INDEXING_STATE_PATH):
 		DirAccess.remove_absolute(INDEXING_STATE_PATH)
+	if FileAccess.file_exists(INDEXING_FILELIST_PATH):
+		DirAccess.remove_absolute(INDEXING_FILELIST_PATH)
+
+
+# Seznam souborů k zaindexování se od konce prohledávání do konce indexace
+# neměnní - uložíme ho jen JEDNOU (ne při každém checkpointu), ať se
+# zbytečně neserializuje pořád dokola.
+func _save_filelist(files: Array) -> void:
+	_write_var_compressed(INDEXING_FILELIST_PATH, {"files": files})
+
+func _load_filelist() -> Array:
+	var parsed = _read_var_compressed(INDEXING_FILELIST_PATH)
+	if typeof(parsed) == TYPE_DICTIONARY:
+		return parsed.get("files", [])
+	return []
 
 # Zjistí, jestli existuje rozpracované (nedokončené) indexování a vrátí
 # o něm info pro zobrazení v UI ({} pokud žádné není).
@@ -451,10 +625,11 @@ func get_resumable_indexing_info() -> Dictionary:
 	var state := _load_indexing_state()
 	if state.size() == 0:
 		return {}
+	var total := _load_filelist().size()
 	return {
 		"folder": state.get("folder", ""),
 		"current": int(state.get("current_index", 0)),
-		"total": int(state.get("total", 0)),
+		"total": total,
 	}
 
 
@@ -518,7 +693,11 @@ func _is_probably_text(file_path: String) -> bool:
 	return float(suspicious) / float(bytes.size()) < 0.05
 
 
-func _index_file(file_path: String) -> void:
+# Hodnota v index_data[slovo] je PackedInt32Array dvojic [file_id, pocet,
+# file_id, pocet, ...] - viz komentář u proměnné index_data výše. file_id je
+# pozice v poli indexed_files, zpátky na cestu se překládá až při zobrazení
+# výsledků hledání.
+func _index_file(file_path: String, file_id: int) -> void:
 	var f := FileAccess.open(file_path, FileAccess.READ)
 	if f == null:
 		return
@@ -533,9 +712,10 @@ func _index_file(file_path: String) -> void:
 		counted_in_file[w] = counted_in_file.get(w, 0) + 1
 
 	for w in counted_in_file.keys():
-		if not index_data.has(w):
-			index_data[w] = {}
-		index_data[w][file_path] = counted_in_file[w]
+		var pairs: PackedInt32Array = index_data.get(w, PackedInt32Array())
+		pairs.append(file_id)
+		pairs.append(counted_in_file[w])
+		index_data[w] = pairs
 
 
 func _tokenize(text: String) -> Array:
@@ -545,7 +725,7 @@ func _tokenize(text: String) -> Array:
 	for m in found:
 		var w: String = m.get_string()
 		w = strip_diacritics(w)
-		if w.length() >= 2:
+		if w.length() >= 2 and not STOPWORDS.has(w):
 			words.append(w)
 	return words
 
@@ -660,31 +840,40 @@ func search(query: String) -> Array:
 
 	_ensure_sorted_words()
 
-	# Pro každé zadané slovo zjistíme, které soubory ho obsahují (a s jakým
-	# součtem výskytů), pak uděláme průnik - musí sedět VŠECHNA zadaná slova.
-	var matches_per_term: Array = []  # Array[Dictionary: file_path -> count]
+	# Pro každé zadané slovo zjistíme, které soubory (podle ID, viz
+	# _index_file) ho obsahují a s jakým součtem výskytů, pak uděláme
+	# průnik - musí sedět VŠECHNA zadaná slova.
+	var matches_per_term: Array = []  # Array[Dictionary: file_id (int) -> count]
 
 	for term in terms:
 		var term_matches: Dictionary = {}
 		for word in _matching_words(term):
-			var files_dict: Dictionary = index_data[word]
-			for fp in files_dict.keys():
-				term_matches[fp] = term_matches.get(fp, 0) + int(files_dict[fp])
+			var pairs: PackedInt32Array = index_data[word]
+			var n := pairs.size()
+			var i := 0
+			while i < n:
+				var fid: int = pairs[i]
+				var cnt: int = pairs[i + 1]
+				term_matches[fid] = term_matches.get(fid, 0) + cnt
+				i += 2
 		matches_per_term.append(term_matches)
 
-	var common_files: Dictionary = matches_per_term[0].duplicate()
+	var common_ids: Dictionary = matches_per_term[0].duplicate()
 	for i in range(1, matches_per_term.size()):
 		var next_matches: Dictionary = matches_per_term[i]
-		for fp in common_files.keys().duplicate():
-			if not next_matches.has(fp):
-				common_files.erase(fp)
+		for fid in common_ids.keys().duplicate():
+			if not next_matches.has(fid):
+				common_ids.erase(fid)
 
 	var results: Array = []
-	for fp in common_files.keys():
+	for fid in common_ids.keys():
+		var file_id: int = int(fid)
+		if file_id < 0 or file_id >= indexed_files.size():
+			continue  # bezpečnostní pojistka proti nesedícím/poškozeným datům
 		var total := 0
 		for term_matches in matches_per_term:
-			total += int(term_matches.get(fp, 0))
-		results.append({"path": fp, "count": total})
+			total += int(term_matches.get(fid, 0))
+		results.append({"path": indexed_files[file_id], "count": total})
 
 	results.sort_custom(func(a, b): return a["count"] > b["count"])
 	return results
