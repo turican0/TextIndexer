@@ -12,6 +12,10 @@ func _ready() -> void:
 	search_debounce.timeout.connect(_on_debounce_timeout)
 	settings_button.pressed.connect(_on_settings_pressed)
 	_update_status()
+
+	# Obnovit poslední hledání (Search.tscn se při návratu z Readeru načítá
+	# úplně od nuly, takže bez tohohle by se pole i výsledky pokaždé vynulovaly).
+	search_edit.text = Indexer.last_search_query
 	_run_search(search_edit.text)
 
 	# Barvy nastavujeme napevno v kódu (nezávisle na globálním motivu),
@@ -25,7 +29,17 @@ func _ready() -> void:
 	status_label.add_theme_font_size_override("font_size", 28)                     # Menší stavový řádek
 
 
-func _on_text_changed(_new_text: String) -> void:
+func _on_text_changed(new_text: String) -> void:
+	Indexer.last_search_query = new_text
+
+	# Pod 3 znaky se stejně nikdy nic nehledá (viz _run_search) - nemá
+	# smysl na tenhle případ čekat 250ms debounce timeru, jen by to
+	# zbytečně zpožďovalo odezvu na první písmena.
+	if new_text.strip_edges().length() < 3:
+		search_debounce.stop()
+		_run_search(new_text)
+		return
+
 	# Počkej, až uživatel na chvíli přestane psát, než spustíme
 	# (relativně dražší) podřetězcové hledání přes celý index.
 	search_debounce.start()

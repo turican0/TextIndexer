@@ -111,6 +111,7 @@ var indexed_files: Array = []        # seznam všech zaindexovaných souborů
 var indexed_titles: Array = []       # titulek stránky (<title>) pro každý soubor - stejný index jako indexed_files, "" když soubor titulek nemá
 var last_index_time: int = 0         # unix čas poslední ÚSPĚŠNĚ dokončené indexace (0 = nikdy)
 var current_reader_path: String = "" # cesta k souboru, který se má otevřít v Readeru
+var last_search_query: String = ""   # poslední zadaný text ve vyhledávání - obnoví se po návratu z Readeru
 
 # Adresáře, které se při procházení úplně přeskočí (obvykle objemné a
 # nezajímavé pro fulltextové hledání - cache, verzovací systém, závislosti...).
