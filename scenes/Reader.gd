@@ -4,7 +4,7 @@ const MIN_FONT_SIZE := 16
 const MAX_FONT_SIZE := 64
 const FONT_STEP := 4
 
-@onready var text_label: RichTextLabel = $VBoxContainer/ScrollContainer/TextLabel
+@onready var text_label: TextEdit = $VBoxContainer/TextLabel
 @onready var back_button: Button = $VBoxContainer/BottomBar/BackButton
 @onready var minus_button: Button = $VBoxContainer/BottomBar/MinusButton
 @onready var plus_button: Button = $VBoxContainer/BottomBar/PlusButton
@@ -24,9 +24,7 @@ func _ready() -> void:
 	# Barvy nastavujeme napevno v kódu (nezávisle na globálním motivu),
 	# aby text nemohl nikdy skončit jako bílý na bílém pozadí.
 	title_label.add_theme_color_override("font_color", Color.BLACK)
-	text_label.add_theme_color_override("default_color", Color.BLACK)
-	text_label.add_theme_color_override("font_selected_color", Color.WHITE)
-	text_label.add_theme_color_override("selection_color", Color(0.2, 0.4, 0.9, 0.6))
+	text_label.add_theme_color_override("font_color", Color.BLACK)
 
 	title_label.add_theme_font_size_override("font_size", 44) # Větší titulek souboru
 
@@ -36,9 +34,7 @@ func _ready() -> void:
 
 
 func _apply_font_size() -> void:
-	text_label.add_theme_font_size_override("normal_font_size", Indexer.reader_font_size)
-	text_label.add_theme_font_size_override("bold_font_size", Indexer.reader_font_size)
-	text_label.add_theme_font_size_override("italics_font_size", Indexer.reader_font_size)
+	text_label.add_theme_font_size_override("font_size", Indexer.reader_font_size)
 
 
 func _on_minus_pressed() -> void:

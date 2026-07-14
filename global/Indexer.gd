@@ -41,7 +41,7 @@ const MAX_FILE_SIZE_BYTES := 4 * 1024 * 1024  # 4 MB
 # prázdné soubory (přesměrování, zápatí, placeholdery...), které nemají
 # smysluplný obsah k vyhledávání, ale v indexu by zbytečně přidávaly
 # záznamy navíc.
-const MIN_FILE_SIZE_BYTES := 3 * 1024  # 3 KB
+const MIN_FILE_SIZE_BYTES := 20 * 1024  # 20 KB
 
 # Mapa pro odstranění diakritiky (čeština/slovenština + běžné latinské akcenty),
 # aby hledání fungovalo bez ohledu na háčky/čárky.
@@ -108,6 +108,7 @@ var reader_font_size: int = 36
 # hutné pole bez téhle režie na položku, takže je výrazně úspornější.
 var index_data: Dictionary = {}
 var indexed_files: Array = []        # seznam všech zaindexovaných souborů
+var indexed_titles: Array = []       # titulek stránky (<title>) pro každý soubor - stejný index jako indexed_files, "" když soubor titulek nemá
 var last_index_time: int = 0         # unix čas poslední ÚSPĚŠNĚ dokončené indexace (0 = nikdy)
 var current_reader_path: String = "" # cesta k souboru, který se má otevřít v Readeru
 
@@ -128,6 +129,7 @@ var _re_comment := RegEx.new()
 var _re_tag := RegEx.new()
 var _re_ws := RegEx.new()
 var _re_nl := RegEx.new()
+var _re_title := RegEx.new()
 
 func _ready() -> void:
 	load_settings()
@@ -141,6 +143,7 @@ func _ready() -> void:
 	_re_tag.compile("<[^>]*>")
 	_re_ws.compile("[ \\t]+")
 	_re_nl.compile("\\n{3,}")
+	_re_title.compile("(?i)<title[^>]*>([\\s\\S]*?)</title>")
 
 	# Přímé, za-běhu nastavení orientace - nezávisí na tom, co (ne)obsahuje
 	# vygenerovaný AndroidManifest.xml, takže by mělo fungovat i kdyby export
@@ -330,17 +333,19 @@ func load_settings() -> void:
 		reader_font_size = int(parsed["reader_font_size"])
 
 # Verze formátu indexu - ponechána i v binárním formátu pro budoucí snazší
-# Verze formátu indexu - ponechána i v binárním formátu pro budoucí snazší
-# rozlišení nekompatibilních dat. Verze 4 = hodnota index_data[slovo] je
-# PackedInt32Array párů [file_id, pocet] (dřív to byl vnořený Dictionary,
-# co měl na mobilu příliš velkou paměťovou režii při stovkách tisíc slov).
-const INDEX_FORMAT_VERSION := 4
+# rozlišení nekompatibilních dat. Verze 5 = přidán seznam "titles" (titulek
+# stránky <title> pro každý soubor, viz indexed_titles). Verze 4 = hodnota
+# index_data[slovo] je PackedInt32Array párů [file_id, pocet] (dřív to byl
+# vnořený Dictionary, co měl na mobilu příliš velkou paměťovou režii při
+# stovkách tisíc slov).
+const INDEX_FORMAT_VERSION := 5
 
 func save_index() -> void:
 	_write_var_compressed(INDEX_PATH, {
 		"version": INDEX_FORMAT_VERSION,
 		"words": index_data,
 		"files": indexed_files,
+		"titles": indexed_titles,
 		"time": last_index_time,
 	})
 
@@ -349,6 +354,12 @@ func load_index() -> void:
 	if typeof(parsed) == TYPE_DICTIONARY and parsed.has("words"):
 		index_data = parsed["words"]
 		indexed_files = parsed.get("files", [])
+		indexed_titles = parsed.get("titles", [])
+		# Index uložený ještě appkou bez titulků - doplníme prázdné položky,
+		# ať indexed_titles má stejnou délku jako indexed_files a indexování
+		# podle file_id nikde nespadne na chybějící index pole.
+		while indexed_titles.size() < indexed_files.size():
+			indexed_titles.append("")
 		last_index_time = int(parsed.get("time", 0))
 		_sorted_words_dirty = true
 		return
@@ -387,6 +398,7 @@ func _migrate_legacy_index() -> bool:
 
 	index_data.clear()
 	indexed_files.clear()
+	indexed_titles.clear()
 
 	if legacy_version >= 2:
 		# file_id už existuje (jako string nebo int klíč) - jen převedeme
@@ -419,6 +431,12 @@ func _migrate_legacy_index() -> bool:
 				pairs.append(int(files_dict[path]))
 			index_data[word] = pairs
 
+	# Starý formát titulky stránek neznal - doplníme prázdné, ať indexed_titles
+	# sedí délkou na indexed_files. Skutečné titulky se doplní při dalším
+	# přeindexování.
+	for i in range(indexed_files.size()):
+		indexed_titles.append("")
+
 	save_index()
 	DirAccess.remove_absolute(INDEX_PATH_LEGACY_JSON)
 	return true
@@ -429,6 +447,7 @@ func _migrate_legacy_index() -> bool:
 func clear_index() -> void:
 	index_data.clear()
 	indexed_files.clear()
+	indexed_titles.clear()
 	last_index_time = 0
 	_sorted_words_dirty = true
 	if FileAccess.file_exists(INDEX_PATH):
@@ -456,6 +475,11 @@ func index_folder_async(path: String, resume: bool = false) -> void:
 			start_index = int(state.get("current_index", 0))
 			index_data = state.get("words", {})
 			indexed_files = state.get("indexed_files", [])
+			indexed_titles = state.get("indexed_titles", [])
+			# Kdyby stav pocházel ještě z verze appky bez titulků, doplníme
+			# chybějící prázdné položky, ať index odpovídá indexed_files.
+			while indexed_titles.size() < indexed_files.size():
+				indexed_titles.append("")
 			indexing_status_text = "Navazuji na předchozí indexování (%d/%d)..." % [start_index, files.size()]
 			indexing_progress_changed.emit(float(start_index) / float(max(files.size(), 1)), indexing_status_text)
 			if files.is_empty():
@@ -466,6 +490,7 @@ func index_folder_async(path: String, resume: bool = false) -> void:
 	if not resume:
 		index_data.clear()
 		indexed_files.clear()
+		indexed_titles.clear()
 		_scan_counter = 0
 		indexing_status_text = "Prohledávám složky..."
 		indexing_progress_changed.emit(0.0, indexing_status_text)
@@ -490,8 +515,9 @@ func index_folder_async(path: String, resume: bool = false) -> void:
 	for i in range(start_index, total):
 		var file_path: String = files[i]
 		var file_id := indexed_files.size()  # index do indexed_files - viz komentář u _index_file
-		_index_file(file_path, file_id)
+		var title := _index_file(file_path, file_id)
 		indexed_files.append(file_path)
+		indexed_titles.append(title)
 
 		# Progress a "pusť enginu na frame" děláme jen po dávkách, ne po
 		# každém souboru - čekání na frame po každém jednom souboru tvrdě
@@ -598,6 +624,7 @@ func _save_indexing_state(path: String, current_index: int) -> void:
 		"current_index": current_index,
 		"words": index_data,
 		"indexed_files": indexed_files,
+		"indexed_titles": indexed_titles,
 	})
 
 func _load_indexing_state() -> Dictionary:
@@ -702,13 +729,16 @@ func _is_probably_text(file_path: String) -> bool:
 # Hodnota v index_data[slovo] je PackedInt32Array dvojic [file_id, pocet,
 # file_id, pocet, ...] - viz komentář u proměnné index_data výše. file_id je
 # pozice v poli indexed_files, zpátky na cestu se překládá až při zobrazení
-# výsledků hledání.
-func _index_file(file_path: String, file_id: int) -> void:
+# výsledků hledání. Vrací titulek stránky (viz _extract_title), který si
+# volající uloží do indexed_titles na stejnou pozici jako file_id.
+func _index_file(file_path: String, file_id: int) -> String:
 	var f := FileAccess.open(file_path, FileAccess.READ)
 	if f == null:
-		return
+		return ""
 	var raw := f.get_as_text()
 	f.close()
+
+	var title := _extract_title(raw)
 
 	var clean := strip_markup(raw)
 	var words := _tokenize(clean)
@@ -722,6 +752,8 @@ func _index_file(file_path: String, file_id: int) -> void:
 		pairs.append(file_id)
 		pairs.append(counted_in_file[w])
 		index_data[w] = pairs
+
+	return title
 
 
 func _tokenize(text: String) -> Array:
@@ -739,6 +771,28 @@ func _tokenize(text: String) -> Array:
 # ---------------------------------------------------------------------------
 # Čištění HTML/JS/CSS - vrací čistý text
 # ---------------------------------------------------------------------------
+
+# Vytáhne obsah <title>...</title> z HTML, očistí ho od případných
+# vnořených značek/entit a zkrátí na rozumnou délku pro zobrazení ve
+# výsledcích hledání. Vrací "" když soubor title tag nemá (typicky prostý
+# text bez HTML).
+func _extract_title(raw: String) -> String:
+	var m := _re_title.search(raw)
+	if m == null:
+		return ""
+	var title: String = m.get_string(1)
+	title = _re_tag.sub(title, " ", true)
+	title = title.replace("&nbsp;", " ")
+	title = title.replace("&amp;", "&")
+	title = title.replace("&lt;", "<")
+	title = title.replace("&gt;", ">")
+	title = title.replace("&quot;", "\"")
+	title = title.replace("&#39;", "'")
+	title = _re_ws.sub(title, " ", true).strip_edges()
+	if title.length() > 200:
+		title = title.substr(0, 200) + "…"
+	return title
+
 
 func strip_markup(text: String) -> String:
 	var result := text
@@ -879,7 +933,8 @@ func search(query: String) -> Array:
 		var total := 0
 		for term_matches in matches_per_term:
 			total += int(term_matches.get(fid, 0))
-		results.append({"path": indexed_files[file_id], "count": total})
+		var title: String = indexed_titles[file_id] if file_id < indexed_titles.size() else ""
+		results.append({"path": indexed_files[file_id], "title": title, "count": total})
 
 	results.sort_custom(func(a, b): return a["count"] > b["count"])
 	return results

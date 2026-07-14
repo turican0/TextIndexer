@@ -90,11 +90,17 @@ func _run_search(new_text: String) -> void:
 	for r in results:
 		var btn := Button.new()
 		var file_path: String = r["path"]
+		var title: String = String(r.get("title", "")).strip_edges()
 		var parent_dir := file_path.get_base_dir().get_file()
 		var display_name := "%s / %s" % [parent_dir, file_path.get_file()] if parent_dir != "" else file_path.get_file()
-		btn.text = "%s   (%d×)" % [display_name, r["count"]]
+		# Titulek stránky (<title>...</title>) pomáhá poznat, o jaký soubor
+		# jde, líp než jen technický název souboru - pokud ho soubor nemá
+		# (např. prostý .txt), zobrazí se aspoň název souboru samotný.
+		if title.is_empty():
+			title = file_path.get_file()
+		btn.text = "%s\n%s   (%d×)" % [title, display_name, r["count"]]
 		btn.tooltip_text = file_path
-		btn.custom_minimum_size.y = 140
+		btn.custom_minimum_size.y = 170
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.add_theme_font_size_override("font_size", 34)
 		btn.add_theme_color_override("font_color", Color.BLACK)
